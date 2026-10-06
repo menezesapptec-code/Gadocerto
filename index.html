@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rebanho 360 — Entrar</title>
+<link rel="stylesheet" href="style.css">
+<meta name="theme-color" content="#1f6b3a">
+</head>
+<body>
+<div class="login">
+  <div class="card">
+    <h1 id="nomeApp">Rebanho 360</h1>
+    <p class="muted" style="text-align:center;margin-top:-6px">Gestão de pecuária</p>
+    <form id="f">
+      <label>E-mail<input type="email" name="email" required autocomplete="username"></label>
+      <label>Senha<input type="password" name="senha" required autocomplete="current-password"></label>
+      <button class="btn grande" type="submit">Entrar</button>
+    </form>
+    <p style="text-align:center"><a href="#" id="esqueci">Esqueci a senha</a></p>
+    <div id="msg"></div>
+  </div>
+</div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="core.js"></script>
+<script>
+iniciarFirebase({ offline: false, emulador: location.search.includes('emu=1') });
+document.title = APP.nome + ' — Entrar'; $('#nomeApp').textContent = APP.nome;
+let enviando = false;
+auth.onAuthStateChanged(async (user) => {
+  if (!user || enviando) return;
+  await irParaPainel(user);
+});
+async function irParaPainel(user) {
+  if (ehSuper(user)) { location.href = 'admin.html' + location.search; return; }
+  const s = await db.collection('usuarios').doc(user.uid).get().catch(() => null);
+  if (!s || !s.exists || s.data().ativo === false) { $('#msg').innerHTML = '<div class="alerta verm">Seu usuário ainda não tem acesso liberado.</div>'; await auth.signOut(); return; }
+  location.href = paginaDoPapel(s.data().papel) + location.search;
+}
+$('#f').onsubmit = async (e) => {
+  e.preventDefault(); const d = lerForm(e.target); enviando = true;
+  try { const cred = await auth.signInWithEmailAndPassword(d.email, d.senha); await irParaPainel(cred.user); }
+  catch (err) { $('#msg').innerHTML = '<div class="alerta verm">E-mail ou senha incorretos.</div>'; }
+  finally { enviando = false; }
+};
+$('#esqueci').onclick = async (e) => {
+  e.preventDefault(); const email = $('[name=email]').value.trim();
+  if (!email) { toast('Digite seu e-mail primeiro', 'aviso'); return; }
+  try { await auth.sendPasswordResetEmail(email); toast('Enviamos um link para seu e-mail'); } catch (err) { toast('Não foi possível enviar', 'erro'); }
+};
+</script>
+</body>
+</html>

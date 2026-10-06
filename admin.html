@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rebanho 360 — Administração</title>
+<link rel="stylesheet" href="style.css">
+<meta name="theme-color" content="#1f6b3a">
+</head>
+<body>
+<div class="topo">
+  <button class="mobile-menu" id="btnMenu">☰</button>
+  <span class="marca" id="nomeApp">Rebanho 360</span>
+  <select id="selFazenda"></select>
+  <span class="esp"></span>
+  <span class="conexao" id="conexao"></span>
+  <span id="usuario" class="muted" style="color:#d9efe0"></span>
+  <button onclick="sair()">Sair</button>
+</div>
+<div class="layout">
+  <nav class="menu" id="menu"></nav>
+  <main class="conteudo" id="tela"><div class="vazio">Carregando…</div></main>
+</div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<script src="core.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

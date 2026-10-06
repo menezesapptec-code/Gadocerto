@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rebanho 360 — Vaqueiro</title>
+<link rel="stylesheet" href="style.css">
+<meta name="theme-color" content="#1f6b3a">
+<style>
+  .vaq{max-width:560px;margin:0 auto;padding:12px}
+  .abas{position:sticky;top:52px;background:var(--fundo);padding:8px 0;z-index:5}
+  .abas button{flex:1;font-size:.95rem;padding:10px 6px}
+  .resumo-animal{background:var(--verde-claro);border-radius:10px;padding:10px 12px;margin:8px 0}
+</style>
+</head>
+<body>
+<div class="topo">
+  <span class="marca" id="nomeApp">Rebanho 360</span><span>· Vaqueiro</span>
+  <span class="esp"></span><span class="conexao" id="conexao"></span>
+  <button onclick="sair()">Sair</button>
+</div>
+<div class="vaq">
+  <div id="fazBox"></div>
+  <div class="abas" id="abas">
+    <button data-a="med" class="ativo">Remédio</button><button data-a="lote">Em lote</button><button data-a="nasc">Nascimento</button><button data-a="morte">Morte</button>
+  </div>
+  <div id="tela"></div>
+  <div class="card"><h3>Meus lançamentos de hoje</h3><div id="hist" class="muted">Nenhum.</div></div>
+  <div class="card"><h3>Sem internet no campo?</h3><p class="muted">Com internet, toque abaixo para baixar os animais do seu retiro. Depois o app encontra os brincos mesmo offline e envia tudo quando o sinal voltar.</p>
+    <label>Retiro<select id="selRetOff"></select></label><button class="btn sec" id="baixar">Baixar animais para usar offline</button> <span id="offInfo" class="muted"></span></div>
+</div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="core.js"></script>
+<script>
+iniciarFirebase({ emulador: location.search.includes('emu=1') });
+const K = { retiros: [], lotes: [], meds: [] };
+let FID = null, FAZ = null, CFG = null, ABA = 'med';
+const HIST_KEY = () => 'r360_vaq_' + U.hoje();
+const err = (e) => { console.error(e); toast('Erro ao gravar: ' + e.message, 'erro', 6000); };
+const nomeRetiro = (id) => (K.retiros.find(r => r.id === id) || {}).nome || '—';
+
+(async () => {
+  await exigirLogin(['superadmin', 'gerente', 'operador', 'vaqueiro']);
+  document.title = APP.nome + ' — Vaqueiro'; $('#nomeApp').textContent = APP.nome;
+  indicadorConexao($('#conexao'));
+  escolherFazendaInicial();
+  if (!SESSAO.fazenda) { $('#tela').innerHTML = '<div class="vazio">Nenhuma fazenda liberada.</div>'; return; }
+  if (SESSAO.fazendas.length > 1) { $('#fazBox').innerHTML = `<label>Fazenda<select id="selFaz">${opcoes(SESSAO.fazendas, SESSAO.fazenda.id)}</select></label>`; $('#selFaz').onchange = (e) => abrirFazenda(e.target.value); }
+  $$('#abas button').forEach(b => b.onclick = () => { ABA = b.dataset.a; $$('#abas button').forEach(x => x.classList.toggle('ativo', x === b)); render(); });
+  $('#baixar').onclick = baixarOffline;
+  await abrirFazenda(SESSAO.fazenda.id);
+})();
+
+async function abrirFazenda(id) {
+  FID = id; FAZ = SESSAO.fazendas.find(f => f.id === id); salvarFazenda(id); CFG = CALC.cfg(FAZ);
+  const ord = (a, b) => (a.nome || '').localeCompare(b.nome || '');
+  const [r, l, m] = await Promise.all(['retiros', 'lotes', 'medicamentos'].map(n => sub(FID, n).get().then(docs)));
+  K.retiros = retirosPermitidos(r.sort(ord)); K.lotes = l.filter(x => !x.retiroId || K.retiros.some(rr => rr.id === x.retiroId)).sort(ord); K.meds = m.filter(x => !x.inativo).sort(ord);
+  $('#selRetOff').innerHTML = opcoes(K.retiros);
+  render(); renderHist();
+}
+function addHist(txt) { let h = []; try { h = JSON.parse(localStorage.getItem(HIST_KEY()) || '[]'); } catch (e) { } h.unshift({ h: new Date().toTimeString().slice(0, 5), txt }); try { localStorage.setItem(HIST_KEY(), JSON.stringify(h.slice(0, 200))); } catch (e) { } renderHist(); }
+function renderHist() { let h = []; try { h = JSON.parse(localStorage.getItem(HIST_KEY()) || '[]'); } catch (e) { } $('#hist').innerHTML = h.length ? h.map(x => `<div>${x.h} – ${U.esc(x.txt)}</div>`).join('') : 'Nenhum.'; }
+
+async function acharAnimal(valor) {
+  const b = U.normBrinco(valor); if (!b) return null;
+  let s = await sub(FID, 'animais').where('brinco', '==', b).get();
+  if (s.empty) s = await sub(FID, 'animais').where('eletronico', '==', b).get();
+  const l = docs(s); return l.find(a => a.status === 'ativo') || null;
+}
+async function baixarOffline() {
+  const r = $('#selRetOff').value; if (!r) return;
+  $('#offInfo').textContent = 'baixando…';
+  try { const s = await sub(FID, 'animais').where('retiroId', '==', r).where('status', '==', 'ativo').get(); $('#offInfo').textContent = `${s.size} animais salvos no aparelho`; } catch (e) { $('#offInfo').textContent = 'Precisa de internet para baixar'; }
+}
+function cardAnimal(a) {
+  const hoje = U.hoje();
+  return `<div class="resumo-animal"><b style="font-size:1.2rem">${U.esc(a.brinco)}</b> · ${CAT_NOME[a.categoria] || ''} · ${U.esc(a.raca || '')} · ${U.esc(nomeRetiro(a.retiroId))}
+    ${a.pesoAtual ? `<div class="muted">${U.n(a.pesoAtual)} kg</div>` : ''}
+    ${a.carenciaAte && a.carenciaAte >= hoje ? `<div class="alerta lar">Em carência até ${U.dataBR(a.carenciaAte)}</div>` : ''}${a.descarte ? `<div class="alerta verm">Descarte: ${U.esc(a.motivoDescarte || '')}</div>` : ''}</div>`;
+}
+const medSelect = () => `<label>Medicamento<select id="med">${opcoes(K.meds.map(m => ({ id: m.id, nome: `${m.nome} (${m.tipo || ''})` })), '', 'Selecione')}</select></label>
+  <div class="grid g2"><label>Dose<input type="number" step="0.1" inputmode="decimal" id="dose"></label><label>Data<input type="date" id="data" value="${U.hoje()}"></label></div><div id="medInfo" class="muted"></div>`;
+function ligarMed() {
+  const upd = () => { const m = K.meds.find(x => x.id === $('#med').value); if (!m) { $('#medInfo').textContent = ''; return; } if (!$('#dose').value && m.dosePadrao) $('#dose').value = m.dosePadrao; const d = U.num($('#dose').value) || 0; $('#medInfo').textContent = `${U.esc(m.unidade || 'ml')} · custo ${U.brl2(CALC.custoDose(m, d))} por animal${m.carenciaDias ? ` · carência ${m.carenciaDias} dias` : ''}`; };
+  $('#med').onchange = () => { $('#dose').value = ''; upd(); }; $('#dose').oninput = upd;
+}
+// monta as gravações de uma aplicação em um animal
+function opsAplicacao(batch, a, med, dose, data, emLote) {
+  const custo = CALC.custoDose(med, dose); const upd = { custoSanitario: inc(custo), atualizadoEm: ts() }; let car = null;
+  if (med.carenciaDias) { car = U.addDias(data, med.carenciaDias); upd.carenciaAte = a.carenciaAte && a.carenciaAte > car ? a.carenciaAte : car; }
+  batch.update(sub(FID, 'animais').doc(a.id), upd);
+  const ev = novoEvento(FID, a, 'sanidade', data, { medicamentoId: med.id, medicamento: med.nome, dose, unidade: med.unidade || 'ml', custo, carenciaAte: car, lote: !!emLote }); batch.set(ev.ref, ev.dados);
+  return custo;
+}
+
+function render() {
+  const t = $('#tela');
+  if (ABA === 'med') {
+    t.innerHTML = `<div class="card"><h3>Aplicar remédio em um animal</h3><label>Brinco<input id="brinco" class="grande-input" placeholder="Nº do brinco" autocomplete="off"></label><div id="achado"></div>${medSelect()}<button class="btn grande" id="ok">Salvar aplicação</button></div>`;
+    ligarMed(); let animal = null;
+    const buscar = async () => { animal = null; $('#achado').innerHTML = '<p class="muted">procurando…</p>'; try { animal = await acharAnimal($('#brinco').value); } catch (e) { } $('#achado').innerHTML = animal ? cardAnimal(animal) : '<div class="alerta verm">Brinco não encontrado.</div>'; };
+    $('#brinco').onchange = buscar; $('#brinco').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); buscar().then(() => $('#med').focus()); } };
+    $('#ok').onclick = async () => {
+      if (!animal) { await buscar(); if (!animal) return; }
+      const med = K.meds.find(x => x.id === $('#med').value); const dose = U.num($('#dose').value); const data = $('#data').value || U.hoje();
+      if (!med || !dose) return toast('Escolha o remédio e a dose', 'erro');
+      const batch = db.batch(); const custo = opsAplicacao(batch, animal, med, dose, data);
+      batch.update(sub(FID, 'medicamentos').doc(med.id), { estoque: inc(-dose) }); lancarFinanceiro(batch, FID, 'sanitario', U.mes(data), custo, animal.retiroId);
+      batch.commit().catch(err);
+      addHist(`${animal.brinco}: ${med.nome} ${dose} ${med.unidade || 'ml'}`); toast('Aplicação salva');
+      $('#brinco').value = ''; $('#achado').innerHTML = ''; animal = null; $('#brinco').focus();
+    };
+    $('#brinco').focus();
+  }
+  if (ABA === 'lote') {
+    t.innerHTML = `<div class="card"><h3>Aplicar em vários animais</h3>
+      <label>Aplicar em<select id="alvo"><option value="">Selecione</option>${K.retiros.map(r => `<option value="r:${r.id}">Retiro inteiro – ${U.esc(r.nome)}</option>`).join('')}${K.lotes.map(l => `<option value="l:${l.id}">Lote – ${U.esc(l.nome)}</option>`).join('')}<option value="b:">Lista de brincos</option></select></label>
+      <div id="listaBox" style="display:none"><label>Brincos (um por linha)<textarea id="lista" rows="5"></textarea></label></div>
+      <label>Só a categoria (opcional)<select id="cat">${opcoes(CATEGORIAS, '', 'Todas')}</select></label>
+      ${medSelect()}<button class="btn sec" id="prev">Ver quantos animais</button> <span id="qtd" class="muted"></span>
+      <button class="btn grande" id="ok" style="margin-top:10px" disabled>Salvar aplicação em lote</button></div>`;
+    ligarMed(); let alvos = [];
+    $('#alvo').onchange = () => { $('#listaBox').style.display = $('#alvo').value === 'b:' ? '' : 'none'; $('#ok').disabled = true; $('#qtd').textContent = ''; };
+    $('#prev').onclick = async () => {
+      const [tipo, id] = $('#alvo').value.split(':'); if (!tipo) return toast('Escolha onde aplicar', 'erro');
+      $('#qtd').textContent = 'buscando…';
+      try {
+        if (tipo === 'r') alvos = docs(await sub(FID, 'animais').where('retiroId', '==', id).where('status', '==', 'ativo').get());
+        else if (tipo === 'l') alvos = docs(await sub(FID, 'animais').where('loteId', '==', id).where('status', '==', 'ativo').get());
+        else { const bs = [...new Set(String($('#lista').value).split(/[\n,;]+/).map(U.normBrinco).filter(Boolean))]; alvos = []; for (let i = 0; i < bs.length; i += 30) alvos.push(...docs(await sub(FID, 'animais').where('brinco', 'in', bs.slice(i, i + 30)).get()).filter(a => a.status === 'ativo')); }
+      } catch (e) { $('#qtd').textContent = 'Sem internet e sem animais baixados.'; return; }
+      const cat = $('#cat').value; if (cat) alvos = alvos.filter(a => a.categoria === cat);
+      $('#qtd').innerHTML = `<b>${alvos.length} animais</b>`; $('#ok').disabled = !alvos.length;
+    };
+    $('#ok').onclick = async () => {
+      const med = K.meds.find(x => x.id === $('#med').value); const dose = U.num($('#dose').value); const data = $('#data').value || U.hoje();
+      if (!med || !dose) return toast('Escolha o remédio e a dose', 'erro');
+      if (!(await confirmar(`Lançar ${med.nome} (${dose} ${med.unidade || 'ml'}) em ${alvos.length} animais?`))) return;
+      const porRetiro = {}; let tot = 0;
+      for (let i = 0; i < alvos.length; i += 200) {
+        const batch = db.batch();
+        alvos.slice(i, i + 200).forEach(a => { const c = opsAplicacao(batch, a, med, dose, data, true); tot += c; porRetiro[a.retiroId || ''] = (porRetiro[a.retiroId || ''] || 0) + c; });
+        batch.commit().catch(err);
+      }
+      const b2 = db.batch(); b2.update(sub(FID, 'medicamentos').doc(med.id), { estoque: inc(-dose * alvos.length) });
+      Object.entries(porRetiro).forEach(([r, v]) => lancarFinanceiro(b2, FID, 'sanitario', U.mes(data), v, r || null)); b2.commit().catch(err);
+      addHist(`${med.nome} em lote: ${alvos.length} animais (${U.brl2(tot)})`); toast(`Lançado em ${alvos.length} animais`); render();
+    };
+  }
+  if (ABA === 'nasc') {
+    t.innerHTML = `<div class="card"><h3>Registrar nascimento</h3><label>Brinco da mãe<input id="mae" class="grande-input" autocomplete="off"></label><div id="achado"></div>
+      <div class="grid g2"><label>Sexo<select id="sexo"><option value="M">Macho</option><option value="F">Fêmea</option></select></label><label>Data<input type="date" id="data" value="${U.hoje()}"></label>
+      <label>Brinco do bezerro (se já tiver)<input id="bez"></label><label>Peso (kg)<input type="number" step="0.1" id="peso"></label></div>
+      <button class="btn grande" id="ok">Salvar nascimento</button></div>`;
+    let mae = null;
+    $('#mae').onchange = async () => { mae = await acharAnimal($('#mae').value).catch(() => null); $('#achado').innerHTML = mae ? cardAnimal(mae) : '<div class="alerta verm">Mãe não encontrada.</div>'; };
+    $('#ok').onclick = async () => {
+      if (!mae) mae = await acharAnimal($('#mae').value).catch(() => null); if (!mae) return toast('Mãe não encontrada', 'erro');
+      const data = $('#data').value || U.hoje(); const sexo = $('#sexo').value; const peso = U.num($('#peso').value);
+      let brinco = U.normBrinco($('#bez').value);
+      if (brinco) { const ex = await acharAnimal(brinco).catch(() => null); if (ex) return toast('Brinco do bezerro já existe', 'erro'); } else brinco = 'N' + data.replace(/-/g, '').slice(2) + '-' + mae.brinco;
+      const b = db.batch(); const ref = sub(FID, 'animais').doc();
+      const bez = { brinco, sexo, categoria: sexo === 'F' ? 'bezerra' : 'bezerro', raca: mae.raca || null, nascimento: data, maeBrinco: mae.brinco, retiroId: mae.retiroId || null, loteId: mae.loteId || null, pesoAtual: peso, dataPeso: peso ? data : null, pesoNascimento: peso, status: 'ativo', origem: 'nascimento', dataEntrada: data, repro: '', comCria: false, desmamado: false, iatfFalhas: 0, iatfTotal: 0, partos: 0, custoSanitario: 0, custoCompra: 0, criadoEm: ts(), atualizadoEm: ts() };
+      b.set(ref, bez);
+      const um = { comCria: true, repro: 'vazia', dataPrevParto: null, partos: (mae.partos || 0) + 1, ultimoParto: data, iatfFalhas: 0, atualizadoEm: ts() }; if (mae.categoria === 'novilha') um.categoria = 'vaca';
+      Object.assign(um, CALC.avaliarDescarte({ ...mae, ...um }, CFG)); b.update(sub(FID, 'animais').doc(mae.id), um);
+      const e1 = novoEvento(FID, { id: ref.id, ...bez }, 'nascimento', data, { mae: mae.brinco, sexo, peso }); b.set(e1.ref, e1.dados);
+      const e2 = novoEvento(FID, mae, 'parto', data, { sexo, bezerro: brinco }); b.set(e2.ref, e2.dados);
+      contarMovimento(b, FID, 'nascimentos', U.mes(data), 1, mae.retiroId); b.set(sub(FID, 'resumo').doc('atual'), { pendente: true }, { merge: true });
+      b.commit().catch(err); addHist(`Nascimento: ${brinco} (mãe ${mae.brinco})`); toast('Nascimento salvo'); render();
+    };
+  }
+  if (ABA === 'morte') {
+    t.innerHTML = `<div class="card"><h3>Registrar morte</h3><label>Brinco<input id="brinco" class="grande-input" autocomplete="off"></label><div id="achado"></div>
+      <div class="grid g2"><label>Data<input type="date" id="data" value="${U.hoje()}"></label><label>Causa<select id="causa"><option>Doença</option><option>Picada de cobra</option><option>Raio</option><option>Acidente</option><option>Parto</option><option>Desconhecida</option><option>Outra</option></select></label></div>
+      <label>Detalhe<input id="det"></label><button class="btn grande perigo" id="ok">Registrar morte</button></div>`;
+    let a = null;
+    $('#brinco').onchange = async () => { a = await acharAnimal($('#brinco').value).catch(() => null); $('#achado').innerHTML = a ? cardAnimal(a) : '<div class="alerta verm">Brinco não encontrado.</div>'; };
+    $('#ok').onclick = async () => {
+      if (!a) a = await acharAnimal($('#brinco').value).catch(() => null); if (!a) return toast('Brinco não encontrado', 'erro');
+      if (!(await confirmar(`Confirmar morte do animal ${a.brinco}?`))) return;
+      const data = $('#data').value || U.hoje(); const causa = $('#causa').value + ($('#det').value ? ' – ' + $('#det').value : '');
+      const b = db.batch(); b.update(sub(FID, 'animais').doc(a.id), { status: 'morto', motivoSaida: 'Morte', dataSaida: data, atualizadoEm: ts() });
+      const ev = novoEvento(FID, a, 'saida', data, { motivo: 'Morte', causa }); b.set(ev.ref, ev.dados);
+      b.set(sub(FID, 'movimentacoes').doc(), { tipo: 'saida', data, mes: U.mes(data), motivo: 'Morte', causa, retiroId: a.retiroId || null, animalIds: [a.id], brincos: [a.brinco], perda: (a.custoCompra || 0) + (a.custoSanitario || 0), usuario: SESSAO.user.email, criadoEm: ts() });
+      contarMovimento(b, FID, 'mortes', U.mes(data), 1, a.retiroId); b.set(sub(FID, 'resumo').doc('atual'), { pendente: true }, { merge: true });
+      b.commit().catch(err); addHist(`Morte: ${a.brinco} (${causa})`); toast('Morte registrada'); render();
+    };
+  }
+}
+</script>
+</body>
+</html>

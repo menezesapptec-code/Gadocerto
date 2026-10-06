@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rebanho 360 — Painel do Proprietário</title>
+<link rel="stylesheet" href="style.css">
+<meta name="theme-color" content="#1f6b3a">
+<style>
+  .painel{max-width:1200px;margin:0 auto;padding:16px}
+  .hero{background:var(--verde);color:#fff;border-radius:var(--raio);padding:20px;margin-bottom:14px}
+  .hero .rot{color:#d9efe0;font-size:.9rem}.hero .val{font-size:2.3rem;font-weight:800;margin:4px 0}
+  .hero .det{color:#d9efe0;font-size:.9rem}
+  .graf{position:relative;height:260px}
+  .seletor{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+</style>
+</head>
+<body>
+<div class="topo">
+  <span class="marca" id="nomeApp">Rebanho 360</span>
+  <select id="selFaz"></select>
+  <span class="esp"></span>
+  <button onclick="sair()">Sair</button>
+</div>
+<div class="painel" id="app"><div class="vazio">Carregando…</div></div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="core.js"></script>
+<script>
+iniciarFirebase({ offline: false, emulador: location.search.includes('emu=1') });
+// cores dos gráficos (paleta validada para daltonismo)
+const COR = { s1: '#2a78d6', s2: '#eb6834', s3: '#1baf7a', grade: '#e6ebe7', texto: '#5d6a62' };
+let FID, FAZ, R, FIN, HIST, VISAO = 'geral'; const GRAFS = [];
+
+(async () => {
+  await exigirLogin(['superadmin', 'gerente', 'proprietario', 'operador']);
+  document.title = APP.nome + ' — Painel'; $('#nomeApp').textContent = APP.nome;
+  escolherFazendaInicial();
+  if (!SESSAO.fazenda) { $('#app').innerHTML = '<div class="vazio">Nenhuma fazenda vinculada ao seu usuário.</div>'; return; }
+  $('#selFaz').innerHTML = opcoes(SESSAO.fazendas, SESSAO.fazenda.id); $('#selFaz').onchange = (e) => carregar(e.target.value);
+  if (SESSAO.fazendas.length < 2) $('#selFaz').style.display = 'none';
+  if (window.Chart) { Chart.defaults.font.family = 'system-ui,-apple-system,Segoe UI,Roboto,sans-serif'; Chart.defaults.color = COR.texto; }
+  await carregar(SESSAO.fazenda.id);
+})();
+
+async function carregar(id) {
+  FID = id; FAZ = SESSAO.fazendas.find(f => f.id === id); salvarFazenda(id); VISAO = 'geral';
+  $('#app').innerHTML = '<div class="vazio">Carregando…</div>';
+  let s = await sub(FID, 'resumo').doc('atual').get();
+  if (!s.exists || !s.data().geral || s.data().pendente) { try { await recalcularResumo(FID); s = await sub(FID, 'resumo').doc('atual').get(); } catch (e) { console.warn(e); } }
+  if (!s.exists || !s.data().geral) { $('#app').innerHTML = '<div class="vazio">O rebanho ainda não foi cadastrado.</div>'; return; }
+  R = s.data();
+  FIN = (await sub(FID, 'resumo').doc('financeiro').get()).data() || {};
+  HIST = docs(await sub(FID, 'resumo').where('tipo', '==', 'hist').get()).sort((a, b) => a.mes.localeCompare(b.mes)).slice(-12);
+  render();
+}
+const fv = (obj, mes) => { const o = (obj || {})[mes] || {}; return VISAO === 'geral' ? (o.total || 0) : (o['r_' + VISAO] || 0); };
+const pct = (v) => v == null ? '—' : U.n(v * 100, 1) + '%';
+
+function render() {
+  GRAFS.forEach(g => g.destroy()); GRAFS.length = 0;
+  const b = VISAO === 'geral' ? R.geral : R.porRetiro[VISAO];
+  const nomes = R.retirosNomes || {};
+  const retiros = Object.entries(R.porRetiro || {}).filter(([id, x]) => x.cabecas && id !== '_sem');
+  const mes = U.mes(); const cot = R.cotacao || {};
+  const san = fv(FIN.sanitario, mes), ger = fv(FIN.gerais, mes);
+  const mov = (k) => fv((FIN.mov || {})[k], mes);
+  const cats = CATEGORIAS.map(c => ({ ...c, d: b.porCategoria[c.id] })).filter(c => c.d && c.d.n);
+  const hist = HIST.map(h => ({ mes: h.mes, v: VISAO === 'geral' ? h.geral : (h.porRetiro || {})[VISAO] })).filter(h => h.v);
+  const partos = Object.entries(b.partosPrevistos || {}).filter(([m]) => m >= mes).sort().slice(0, 12);
+  const meses12 = []; { const d = new Date(); for (let i = 11; i >= 0; i--) { const x = new Date(d.getFullYear(), d.getMonth() - i, 1); meses12.push(`${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`); } }
+  const investido = b.custoCompra + b.custoSanitario;
+
+  $('#app').innerHTML = `
+  <div class="linha"><h2 style="margin:0">${U.esc(FAZ.nome)}</h2><span class="muted">Atualizado em ${U.dataBR(R.calculadoEm)}</span></div>
+  <div class="seletor" style="margin-top:10px">${[['geral', 'Visão geral'], ...retiros.map(([id]) => [id, nomes[id] || 'Retiro'])].map(([id, n]) => `<button class="btn ${VISAO === id ? '' : 'sec'} peq" data-v="${id}">${U.esc(n)}</button>`).join('')}</div>
+  <div class="hero"><div class="rot">Valor estimado do rebanho ${VISAO === 'geral' ? '' : '– ' + U.esc(nomes[VISAO] || '')}</div><div class="val">${U.brl(b.valor)}</div>
+    <div class="det">${U.n(b.cabecas)} cabeças · ${U.n(b.arrobas)} arrobas de carcaça · ${U.n(b.pesoTotal / 1000, 1)} t de peso vivo</div>
+    <div class="det" style="margin-top:6px">${cot.arrobaBoi ? `Cotação ${U.esc(cot.uf || '')}: boi ${U.brl2(cot.arrobaBoi)}/@${cot.arrobaVaca ? ` · vaca ${U.brl2(cot.arrobaVaca)}/@` : ''} · ${U.esc(cot.fonte || '')} ${U.dataBR(cot.data)}` : 'Cotação da arroba ainda não cadastrada'}</div></div>
+  <div class="grid g4">
+    <div class="kpi"><div class="rot">Cabeças</div><div class="val">${U.n(b.cabecas)}</div><div class="det">${U.n(b.machos)} machos · ${U.n(b.femeas)} fêmeas</div></div>
+    <div class="kpi"><div class="rot">Peso médio</div><div class="val">${U.n(b.pesoMedio)} kg</div><div class="det">${b.gmdMedio != null ? `ganho médio ${U.n(b.gmdMedio, 3)} kg/dia` : 'ganho ainda não medido'}</div></div>
+    <div class="kpi"><div class="rot">Taxa de prenhez</div><div class="val">${pct(b.repro.taxaPrenhez)}</div><div class="det">${U.n(b.repro.prenhas)} prenhas · ${U.n(b.repro.vazias)} vazias</div></div>
+    <div class="kpi"><div class="rot">Descarte sugerido</div><div class="val">${U.n(b.descarte)}</div><div class="det">${U.n(b.emCarencia)} em carência de remédio</div></div>
+    <div class="kpi"><div class="rot">Gasto com sanidade (${U.mesBR(mes)})</div><div class="val">${U.brl(san)}</div><div class="det">${b.cabecas ? U.brl2(san / b.cabecas) + ' por cabeça' : ''}</div></div>
+    <div class="kpi"><div class="rot">Custos gerais (${U.mesBR(mes)})</div><div class="val">${U.brl(ger)}</div><div class="det">${b.cabecas ? U.brl2(ger / b.cabecas) + ' por cabeça' : ''}</div></div>
+    <div class="kpi"><div class="rot">Entradas no mês</div><div class="val">${U.n(mov('nascimentos') + mov('compras'))}</div><div class="det">${U.n(mov('nascimentos'))} nascimentos · ${U.n(mov('compras'))} compras</div></div>
+    <div class="kpi"><div class="rot">Saídas no mês</div><div class="val">${U.n(mov('vendas') + mov('mortes') + mov('outrasSaidas'))}</div><div class="det">${U.n(mov('vendas'))} vendas · ${U.n(mov('mortes'))} mortes</div></div>
+  </div>
+
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card"><h3>Evolução do valor do rebanho</h3>${hist.length > 1 ? '<div class="graf"><canvas id="gHist"></canvas></div>' : '<p class="muted">O gráfico aparece a partir do segundo mês de uso.</p>'}</div>
+    <div class="card"><h3>Cabeças por categoria</h3><div class="graf"><canvas id="gCat"></canvas></div></div>
+  </div>
+
+  <div class="card"><h3>Rebanho por categoria</h3><div class="tabela-box"><table><thead><tr><th>Categoria</th><th class="n">Cabeças</th><th class="n">Peso médio</th><th class="n">Arrobas</th><th class="n">Valor</th></tr></thead><tbody>
+    ${cats.map(c => `<tr><td>${c.nome}</td><td class="n">${U.n(c.d.n)}</td><td class="n">${U.n(c.d.peso / c.d.n)} kg</td><td class="n">${U.n(c.d.arrobas)}</td><td class="n">${U.brl(c.d.valor)}</td></tr>`).join('')}
+    <tr><td><b>Total</b></td><td class="n"><b>${U.n(b.cabecas)}</b></td><td class="n">${b.cabecas ? U.n(b.pesoTotal / b.cabecas) + ' kg' : ''}</td><td class="n"><b>${U.n(b.arrobas)}</b></td><td class="n"><b>${U.brl(b.valor)}</b></td></tr></tbody></table></div>
+    <p class="muted">Peso médio inclui estimativa para animais ainda não pesados (${U.n(b.semPeso)}).</p></div>
+
+  <div class="grid g2">
+    <div class="card"><h3>Raças</h3><div class="grid g3">
+      <div class="kpi"><div class="rot">Nelore</div><div class="val">${U.n(b.porRaca.Nelore)}</div><div class="det">${b.cabecas ? U.n(b.porRaca.Nelore / b.cabecas * 100, 0) + '%' : ''}</div></div>
+      <div class="kpi"><div class="rot">Cruzados</div><div class="val">${U.n(b.porRaca.Cruzado)}</div><div class="det">${b.cabecas ? U.n(b.porRaca.Cruzado / b.cabecas * 100, 0) + '%' : ''}</div></div>
+      <div class="kpi"><div class="rot">Outras raças</div><div class="val">${U.n(b.porRaca.Outras)}</div><div class="det">${b.cabecas ? U.n(b.porRaca.Outras / b.cabecas * 100, 0) + '%' : ''}</div></div></div>
+      <div style="margin-top:8px">${Object.entries(b.racaDetalhe).sort((x, y) => y[1] - x[1]).map(([k, v]) => `<span class="tag">${U.esc(k)}: ${U.n(v)}</span>`).join(' ')}</div></div>
+    <div class="card"><h3>Reprodução</h3><div class="grid g3">
+      <div class="kpi"><div class="rot">Fêmeas aptas</div><div class="val">${U.n(b.repro.aptas)}</div></div>
+      <div class="kpi"><div class="rot">Inseminadas (aguardando DG)</div><div class="val">${U.n(b.repro.inseminadas)}</div></div>
+      <div class="kpi"><div class="rot">Paridas</div><div class="val">${U.n(b.repro.comCria)}</div></div></div>
+      <h3 style="margin-top:12px">Partos previstos</h3>${partos.length ? '<div class="graf" style="height:200px"><canvas id="gPartos"></canvas></div>' : '<p class="muted">Nenhum parto previsto.</p>'}</div>
+  </div>
+
+  <div class="card"><h3>Gastos por mês</h3><div class="graf"><canvas id="gGastos"></canvas></div></div>
+
+  <div class="card"><h3>Investido x valor atual</h3><div class="grid g3">
+    <div class="kpi"><div class="rot">Custo de compra dos animais atuais</div><div class="val">${U.brl(b.custoCompra)}</div></div>
+    <div class="kpi"><div class="rot">Gastos diretos (remédios, sêmen)</div><div class="val">${U.brl(b.custoSanitario)}</div></div>
+    <div class="kpi"><div class="rot">Valor atual – investido</div><div class="val" style="color:${b.valor - investido >= 0 ? 'var(--verde)' : 'var(--erro)'}">${U.brl(b.valor - investido)}</div></div></div>
+    <p class="muted">Animais nascidos na fazenda não têm custo de compra. Custos gerais (sal, mão de obra…) aparecem no gráfico acima.</p></div>
+
+  ${VISAO === 'geral' && retiros.length > 1 ? `<div class="card"><h3>Comparativo entre retiros</h3><div class="tabela-box"><table><thead><tr><th>Retiro</th><th class="n">Cabeças</th><th class="n">Valor</th><th class="n">Peso médio</th><th class="n">GMD</th><th class="n">Prenhez</th><th class="n">Sanidade ${U.mesBR(mes)}</th><th class="n">Por cabeça</th></tr></thead><tbody>
+    ${retiros.map(([id, x]) => { const sv = ((FIN.sanitario || {})[mes] || {})['r_' + id] || 0; return `<tr><td>${U.esc(nomes[id] || '')}</td><td class="n">${U.n(x.cabecas)}</td><td class="n">${U.brl(x.valor)}</td><td class="n">${U.n(x.pesoMedio)} kg</td><td class="n">${x.gmdMedio != null ? U.n(x.gmdMedio, 3) : '—'}</td><td class="n">${pct(x.repro.taxaPrenhez)}</td><td class="n">${U.brl(sv)}</td><td class="n">${U.brl2(sv / x.cabecas)}</td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
+  <p class="muted" style="text-align:center">Painel somente para visualização. Valores estimados pela cotação da arroba do estado e pelo rendimento de carcaça configurado.</p>`;
+
+  $$('[data-v]').forEach(bt => bt.onclick = () => { VISAO = bt.dataset.v; render(); });
+  if (!window.Chart) return;
+  const base = (extra = {}) => ({ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } }, scales: { x: { grid: { display: false } }, y: { grid: { color: COR.grade }, beginAtZero: true, ticks: { callback: v => U.n(v) } } }, ...extra });
+  const barra = { borderRadius: 4, borderSkipped: 'start', maxBarThickness: 42 };
+  GRAFS.push(new Chart($('#gCat'), { type: 'bar', data: { labels: cats.map(c => c.nome), datasets: [{ label: 'Cabeças', data: cats.map(c => c.d.n), backgroundColor: COR.s1, ...barra }] }, options: base() }));
+  if ($('#gHist')) GRAFS.push(new Chart($('#gHist'), { type: 'line', data: { labels: hist.map(h => U.mesBR(h.mes)), datasets: [{ label: 'Valor', data: hist.map(h => Math.round(h.v.valor)), borderColor: COR.s1, backgroundColor: COR.s1, borderWidth: 2, pointRadius: 4, tension: .25 }] }, options: base({ plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, callbacks: { label: c => U.brl(c.parsed.y) } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: COR.grade }, ticks: { callback: v => 'R$ ' + U.n(v / 1e6, 1) + ' mi' } } } }) }));
+  if ($('#gPartos')) GRAFS.push(new Chart($('#gPartos'), { type: 'bar', data: { labels: partos.map(p => U.mesBR(p[0])), datasets: [{ label: 'Partos', data: partos.map(p => p[1]), backgroundColor: COR.s3, ...barra }] }, options: base() }));
+  GRAFS.push(new Chart($('#gGastos'), { type: 'bar', data: { labels: meses12.map(U.mesBR), datasets: [
+    { label: 'Sanidade e reprodução', data: meses12.map(m => fv(FIN.sanitario, m)), backgroundColor: COR.s1, ...barra, borderColor: '#fff', borderWidth: { top: 2 } },
+    { label: 'Custos gerais', data: meses12.map(m => fv(FIN.gerais, m)), backgroundColor: COR.s2, ...barra, borderColor: '#fff', borderWidth: { top: 2 } }] },
+    options: base({ plugins: { legend: { display: true, position: 'top', align: 'start' }, tooltip: { mode: 'index', intersect: false, callbacks: { label: c => `${c.dataset.label}: ${U.brl(c.parsed.y)}` } } }, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, grid: { color: COR.grade }, ticks: { callback: v => U.brl(v) } } } }) }));
+}
+</script>
+</body>
+</html>
