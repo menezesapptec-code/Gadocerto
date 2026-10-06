@@ -17,7 +17,7 @@ const MENU = [
   ['Reprodução', [['protocolos', 'Protocolos IATF'], ['touros', 'Touros e sêmen'], ['descarte', 'Descarte'], ['partos', 'Previsão de partos']]],
   ['Manejo', [['manejos', 'Manejos realizados']]],
   ['Relatórios', [['relatorios', 'Relatórios']]],
-  ['Configuração', [['retiros', 'Retiros e lotes'], ['regras', 'Regras e valoração'], ['usuarios', 'Usuários e acessos'], ['fazendas', 'Fazendas', 1], ['cotacoes', 'Cotações da arroba', 1]]]
+  ['Configuração', [['retiros', 'Retiros e lotes'], ['regras', 'Preços e regras'], ['usuarios', 'Usuários e acessos'], ['fazendas', 'Fazendas', 1], ['cotacoes', 'Cotações da arroba', 1]]]
 ];
 
 /* ---------- inicialização ---------- */
@@ -118,9 +118,10 @@ TELAS.geral = async (el) => {
   el.innerHTML = `
   <div class="linha"><h2>${U.esc(FAZ.nome)}</h2><span class="tag">${U.esc(FAZ.uf || 'UF?')}</span><span class="esp"></span>
     <span class="muted">Calculado em ${U.dataBR(r.calculadoEm)}</span><button class="btn sec peq" id="btnRecalc">Recalcular agora</button></div>
-  ${!cot || !cot.arrobaBoi ? `<div class="alerta lar">Sem cotação da arroba para esta fazenda. Confira a cidade e o estado em Configuração › Regras e valoração. <button class="btn sec peq" id="btnCot">Buscar cotação</button></div>` : `<div class="alerta azul linha"><span>Boi <b>${U.brl2(cot.arrobaBoi)}/@</b> <span class="muted">(${U.esc(cot.fonteBoi || cot.fonte || '')}${cot.data ? ', ' + U.esc(cot.data) : ''})</span> · Vaca <b>${cot.arrobaVaca ? U.brl2(cot.arrobaVaca) + '/@' : '—'}</b> <span class="muted">(${U.esc(cot.fonteVaca || '')}${cot.dataVaca ? ', ' + U.esc(cot.dataVaca) : ''})</span></span><span class="esp"></span><button class="btn sec peq" id="btnCot">Atualizar cotação</button></div>`}
+  ${!cot || !cot.arrobaBoi ? `<div class="alerta lar">Sem cotação automática da arroba para esta fazenda. Confira a cidade em Configuração › Preços e regras, ou informe os valores manualmente lá. <button class="btn sec peq" id="btnCot">Buscar cotação</button></div>` : `<div class="alerta azul linha"><span>Boi <b>${U.brl2(cot.arrobaBoi)}/@</b> <span class="muted">(${U.esc(cot.fonteBoi || cot.fonte || '')}${cot.data ? ', ' + U.esc(cot.data) : ''})</span> · Vaca <b>${cot.arrobaVaca ? U.brl2(cot.arrobaVaca) + '/@' : '—'}</b> <span class="muted">(${U.esc(cot.fonteVaca || '')}${cot.dataVaca ? ', ' + U.esc(cot.dataVaca) : ''})</span></span><span class="esp"></span><button class="btn sec peq" id="btnCot">Atualizar cotação</button></div>`}
+  ${r.semPreco && Object.keys(r.semPreco).length ? `<div class="alerta verm">⚠ Sem preço para: <b>${Object.entries(r.semPreco).map(([k, n]) => `${CAT_NOME[k] || k} (${n})`).join(', ')}</b> – esses animais estão valendo zero. <button class="btn peq" onclick="abrir('regras')">Informar preço</button></div>` : ''}
   <div class="grid g4">
-    <div class="kpi dest"><div class="rot">Valor estimado do rebanho</div><div class="val">${U.brl(g.valor)}</div><div class="det">${U.n(g.arrobas)} @ de carcaça</div></div>
+    <div class="kpi dest"><div class="rot">Valor estimado do rebanho</div><div class="val">${U.brl(g.valor)}</div><div class="det">${U.n(g.arrobas)} @ ${r.base === 'carcaca' ? 'de carcaça' : 'em pé'}</div></div>
     <div class="kpi"><div class="rot">Cabeças</div><div class="val">${U.n(g.cabecas)}</div><div class="det">${U.n(g.machos)} machos · ${U.n(g.femeas)} fêmeas</div></div>
     <div class="kpi"><div class="rot">Peso médio (pesados)</div><div class="val">${U.n(g.pesoMedio)} kg</div><div class="det">${U.n(g.semPeso)} sem pesagem (peso estimado)</div></div>
     <div class="kpi"><div class="rot">Taxa de prenhez</div><div class="val">${g.repro.taxaPrenhez == null ? '—' : U.n(g.repro.taxaPrenhez * 100, 1) + '%'}</div><div class="det">${U.n(g.repro.prenhas)} prenhas · ${U.n(g.repro.vazias)} vazias</div></div>
@@ -184,7 +185,7 @@ function renderLista(limite = 300) {
 }
 function linhaExport(a) {
   const av = CALC.avaliar(a, C.cot, CALC.cfg(FAZ));
-  return { Brinco: a.brinco, Eletronico: a.eletronico || '', Nome: a.nome || '', Sexo: a.sexo, Categoria: CAT_NOME[a.categoria] || '', Raca: a.raca || '', Nascimento: U.dataBR(a.nascimento), IdadeMeses: a.nascimento ? U.idadeMeses(a.nascimento) : '', Retiro: nomeRetiro(a.retiroId), Lote: nomeLote(a.loteId), Peso: a.pesoAtual || '', DataPeso: U.dataBR(a.dataPeso), GMD: a.gmd ?? '', Reproducao: REPRO[a.repro || ''], Parida: a.comCria ? 'Sim' : 'Não', PrevParto: U.dataBR(a.dataPrevParto), IATFsemSucesso: a.iatfFalhas || 0, Descarte: a.descarte ? (a.motivoDescarte || 'Sim') : '', Carencia: a.carenciaAte ? U.dataBR(a.carenciaAte) : '', Mae: a.maeBrinco || '', CustoCompra: a.custoCompra || 0, GastoDireto: a.custoSanitario || 0, ArrobasCarcaca: Math.round(av.arrobas * 100) / 100, ValorEstimado: Math.round(av.valor), Situacao: a.status };
+  return { Brinco: a.brinco, Eletronico: a.eletronico || '', Nome: a.nome || '', Sexo: a.sexo, Categoria: CAT_NOME[a.categoria] || '', Raca: a.raca || '', Nascimento: U.dataBR(a.nascimento), IdadeMeses: a.nascimento ? U.idadeMeses(a.nascimento) : '', Retiro: nomeRetiro(a.retiroId), Lote: nomeLote(a.loteId), Peso: a.pesoAtual || '', DataPeso: U.dataBR(a.dataPeso), GMD: a.gmd ?? '', Reproducao: REPRO[a.repro || ''], Parida: a.comCria ? 'Sim' : 'Não', PrevParto: U.dataBR(a.dataPrevParto), IATFsemSucesso: a.iatfFalhas || 0, Descarte: a.descarte ? (a.motivoDescarte || 'Sim') : '', Carencia: a.carenciaAte ? U.dataBR(a.carenciaAte) : '', Mae: a.maeBrinco || '', CustoCompra: a.custoCompra || 0, GastoDireto: a.custoSanitario || 0, Arrobas: Math.round(av.arrobas * 100) / 100, ValorEstimado: Math.round(av.valor), Situacao: a.status };
 }
 
 async function fichaAnimal(id) {
@@ -866,24 +867,51 @@ TELAS.retiros = async (el) => {
 TELAS.regras = async (el) => {
   const cfg = CALC.cfg(FAZ);
   const cotDoc = (await sub(FID, 'resumo').doc('cotacao').get().catch(() => null) || { data: () => null }).data();
-  const metodos = [{ id: 'arroba_boi', nome: '@ do boi' }, { id: 'arroba_vaca', nome: '@ da vaca' }, { id: 'cabeca', nome: 'Preço por cabeça' }];
-  el.innerHTML = `<h2>Regras e valoração – ${U.esc(FAZ.nome)}</h2>
+  el.innerHTML = `<h2>Preços e regras – ${U.esc(FAZ.nome)}</h2>
   <div class="card"><h3>Regras de descarte e reprodução</h3><div class="grid g3">
     <label>Descartar após quantas IATF seguidas sem prenhez<input type="number" id="rIatf" value="${cfg.regras.maxIatfFalhas}"></label>
     <label>Idade máxima da vaca (anos)<input type="number" id="rIdade" value="${cfg.regras.idadeMaxVacaAnos}"></label>
     <label>Duração da gestação (dias)<input type="number" id="rGest" value="${cfg.regras.diasGestacao}"></label></div>
     <p class="muted">O sistema não descarta sozinho: ele marca o animal como candidato e mostra o alerta no curral.</p></div>
-  <div class="card"><h3>Como avaliar cada categoria</h3><p class="muted">Arroba = peso vivo × rendimento de carcaça ÷ 15. Bezerros e garrotes normalmente são avaliados por preço de reposição por cabeça.</p>
-    ${tabela([{ t: 'Categoria', f: c => c.nome }, { t: 'Método', f: c => `<select data-m="${c.id}">${opcoes(metodos, cfg.metodo[c.id])}</select>` }, { t: 'Rendimento carcaça (%)', f: c => `<input type="number" step="0.1" data-r="${c.id}" value="${cfg.rendimento[c.id]}">` }, { t: 'Peso estimado se sem pesagem (kg)', f: c => `<input type="number" data-p="${c.id}" value="${cfg.pesoPadrao[c.id]}">` }], CATEGORIAS)}
-    <button class="btn" id="salvar" style="margin-top:12px">Salvar regras</button></div>
+  <div class="card" id="cardPrecos"><h3>Preço por categoria</h3>
+    <div class="grid g3"><label>Base da arroba<select id="rBase"><option value="pe" ${cfg.base === 'pe' ? 'selected' : ''}>Gado em pé (peso vivo ÷ 30 kg)</option><option value="carcaca" ${cfg.base === 'carcaca' ? 'selected' : ''}>Carcaça (peso × rendimento ÷ 15 kg)</option></select></label></div>
+    <p class="muted">O valor automático vem da cotação da praça (boi e vaca). Para usar outro valor, preencha o <b>valor manual</b>: ele passa a valer no lugar do automático. Deixe em branco para voltar ao automático.</p>
+    <div id="semPrecoAviso"></div>
+    ${tabela([{ t: 'Categoria', f: c => `<b>${c.nome}</b>` },
+      { t: 'Cobrança', f: c => `<select data-u="${c.id}" style="min-width:110px">${opcoes([{ id: 'arroba', nome: 'R$/@' }, { id: 'cabeca', nome: 'R$/cabeça' }], cfg.precos[c.id].unidade)}</select>` },
+      { t: 'Referência automática', f: c => `<select data-ref="${c.id}" style="min-width:120px">${opcoes([{ id: 'boi', nome: '@ do boi' }, { id: 'vaca', nome: '@ da vaca' }, { id: '', nome: 'Nenhuma' }], cfg.precos[c.id].ref)}</select>` },
+      { t: 'Automático hoje', f: c => `<span data-auto="${c.id}"></span>` },
+      { t: 'Valor manual (R$)', f: c => `<input type="number" step="0.01" data-v="${c.id}" value="${cfg.precos[c.id].valor ?? ''}" placeholder="usar automático" style="min-width:110px">` },
+      { t: 'Situação', f: c => `<span data-st="${c.id}"></span>` },
+      { t: 'Peso estimado (kg)', f: c => `<input type="number" data-p="${c.id}" value="${cfg.pesoPadrao[c.id]}" style="min-width:80px">` },
+      { t: 'Rend. carcaça %', f: c => `<input type="number" step="0.1" data-r="${c.id}" value="${cfg.rendimento[c.id]}" style="min-width:70px">` }], CATEGORIAS)}
+    <p class="muted">Peso estimado é usado para animais ainda sem pesagem. Rendimento de carcaça só é usado quando a base é "Carcaça".</p></div>
   <div class="card"><h3>Dados da fazenda e cotação da arroba</h3><div class="grid g3"><label>Nome<input id="fNome" value="${U.esc(FAZ.nome)}" ${ehS() ? '' : 'disabled'}></label><label>Estado<select id="fUf" ${ehS() ? '' : 'disabled'}>${opcoes(UFS, FAZ.uf)}</select></label><label>Cidade<input id="fCid" value="${U.esc(FAZ.cidade || '')}"></label><label>Proprietário<input id="fProp" value="${U.esc(FAZ.proprietario || '')}"></label>
     <label>Praça de referência<select id="fPraca"><option value="">Automática (mais próxima da cidade)</option>${((cotDoc && cotDoc.opcoes) || []).map(o => `<option value="${U.esc(o.id)}" ${FAZ.praca === o.id ? 'selected' : ''}>${U.esc(o.fonte)} – ${U.esc(o.nome)} (${U.esc(o.uf)})${o.km != null ? ' · ' + o.km + ' km' : ''} · ${U.brl2(o.valor)}</option>`).join('')}</select></label>
     <label class="chk" style="margin-top:22px"><input type="checkbox" id="fAuto" ${FAZ.cotacaoAuto === false ? '' : 'checked'}>Atualizar arroba automaticamente</label></div>
-    <div id="cotInfo">${cotDoc && cotDoc.boi ? `<div class="alerta azul">Boi: <b>${U.brl2(cotDoc.boi.valor)}/@</b> – ${U.esc(cotDoc.boi.fonte)}, ${U.esc(cotDoc.boi.praca)}${cotDoc.boi.km != null ? ` (${cotDoc.boi.km} km)` : ''}, ${U.esc(cotDoc.boi.data || '')}${cotDoc.vaca ? ` · Vaca: <b>${U.brl2(cotDoc.vaca.valor)}/@</b> – ${U.esc(cotDoc.vaca.fonte)}, ${U.esc(cotDoc.vaca.praca)}` : ''}<br><span class="muted">Buscado em ${new Date(cotDoc.buscadoEm).toLocaleString('pt-BR')}. Atualiza sozinho a cada 24 h. Bezerro, bezerra, garrote e novilha usam o preço por cabeça cadastrado em Cotações (por estado).</span></div>` : '<div class="alerta lar">Cotação automática ainda não buscada.</div>'}</div>
-    <p class="muted">Salve as regras para aplicar a cidade/praça.</p></div>`;
+    <div id="cotInfo">${cotDoc && cotDoc.boi ? `<div class="alerta azul">Boi: <b>${U.brl2(cotDoc.boi.valor)}/@</b> – ${U.esc(cotDoc.boi.fonte)}, ${U.esc(cotDoc.boi.praca)}${cotDoc.boi.km != null ? ` (${cotDoc.boi.km} km)` : ''}, ${U.esc(cotDoc.boi.data || '')}${cotDoc.vaca ? ` · Vaca: <b>${U.brl2(cotDoc.vaca.valor)}/@</b> – ${U.esc(cotDoc.vaca.fonte)}, ${U.esc(cotDoc.vaca.praca)}` : ''}<br><span class="muted">Buscado em ${new Date(cotDoc.buscadoEm).toLocaleString('pt-BR')}. Atualiza sozinho a cada 24 h. Os preços de cada categoria estão logo abaixo.</span></div>` : '<div class="alerta lar">Cotação automática ainda não buscada.</div>'}</div>
+    </div>
+  <div class="linha" style="position:sticky;bottom:0;background:var(--fundo);padding:10px 0"><span class="esp"></span><button class="btn" id="salvar">Salvar tudo</button></div>`;
+  // mostra o valor automático e a situação de cada categoria conforme o que está na tela
+  const atualizarPrecos = () => {
+    const precos = {}; CATEGORIAS.forEach(c => precos[c.id] = { unidade: $(`[data-u=${c.id}]`).value, ref: $(`[data-ref=${c.id}]`).value, valor: U.num($(`[data-v=${c.id}]`).value) });
+    const cfgTela = { ...cfg, precos }; const falta = [];
+    CATEGORIAS.forEach(c => {
+      const pr = CALC.preco(c.id, C.cot, cfgTela); const un = precos[c.id].unidade === 'cabeca' ? '/cab' : '/@';
+      $(`[data-auto=${c.id}]`).innerHTML = pr.auto ? `${U.brl2(pr.auto)}${un} <div class="muted">${U.esc(pr.origemAuto || '')}</div>` : '<span class="muted">—</span>';
+      $(`[data-st=${c.id}]`).innerHTML = pr.origem === 'manual' ? '<span class="tag azul">manual</span>' : pr.origem === 'auto' ? '<span class="tag verde">automático</span>' : '<span class="tag verm">⚠ sem valor</span>';
+      if (!pr.valor) falta.push(c.nome);
+    });
+    $('#semPrecoAviso').innerHTML = falta.length ? `<div class="alerta verm">Sem preço automático para: <b>${falta.join(', ')}</b>. Informe o valor manual dessas categorias, senão elas ficam com valor zero no rebanho.</div>` : '';
+  };
+  $$('#cardPrecos select, #cardPrecos input').forEach(i => i.oninput = i.onchange = atualizarPrecos); atualizarPrecos();
   $('#salvar').onclick = async () => {
-    const config = { regras: { maxIatfFalhas: U.num($('#rIatf').value) || 0, idadeMaxVacaAnos: U.num($('#rIdade').value) || 0, diasGestacao: U.num($('#rGest').value) || 285 }, metodo: {}, rendimento: {}, pesoPadrao: {} };
-    CATEGORIAS.forEach(c => { config.metodo[c.id] = $(`[data-m=${c.id}]`).value; config.rendimento[c.id] = U.num($(`[data-r=${c.id}]`).value) || 50; config.pesoPadrao[c.id] = U.num($(`[data-p=${c.id}]`).value) || 0; });
+    const config = { regras: { maxIatfFalhas: U.num($('#rIatf').value) || 0, idadeMaxVacaAnos: U.num($('#rIdade').value) || 0, diasGestacao: U.num($('#rGest').value) || 285 }, base: $('#rBase').value, metodo: {}, precos: {}, rendimento: {}, pesoPadrao: {} };
+    CATEGORIAS.forEach(c => {
+      const pr = { unidade: $(`[data-u=${c.id}]`).value, ref: $(`[data-ref=${c.id}]`).value, valor: U.num($(`[data-v=${c.id}]`).value) };
+      config.precos[c.id] = pr; config.metodo[c.id] = pr.unidade === 'cabeca' ? 'cabeca' : pr.ref === 'vaca' ? 'arroba_vaca' : 'arroba_boi';
+      config.rendimento[c.id] = U.num($(`[data-r=${c.id}]`).value) || 50; config.pesoPadrao[c.id] = U.num($(`[data-p=${c.id}]`).value) || 0;
+    });
     const upd = { config, proprietario: $('#fProp').value.trim(), cidade: $('#fCid').value.trim(), praca: $('#fPraca').value, cotacaoAuto: $('#fAuto').checked }; if (ehS()) { upd.nome = $('#fNome').value.trim(); upd.uf = $('#fUf').value; }
     await fz(FID).update(upd); Object.assign(FAZ, upd);
     if (upd.cotacaoAuto) { const rc = await atualizarCotacaoAuto(FID, FAZ, true); if (!rc.doc || !rc.doc.boi) toast('Não consegui buscar a cotação: ' + (rc.erro || ''), 'aviso', 6000); }
