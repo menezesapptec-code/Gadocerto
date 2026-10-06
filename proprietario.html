@@ -48,7 +48,8 @@ async function carregar(id) {
   FID = id; FAZ = SESSAO.fazendas.find(f => f.id === id); salvarFazenda(id); VISAO = 'geral';
   $('#app').innerHTML = '<div class="vazio">Carregando…</div>';
   let s = await sub(FID, 'resumo').doc('atual').get();
-  if (!s.exists || !s.data().geral || s.data().pendente) { try { await recalcularResumo(FID); s = await sub(FID, 'resumo').doc('atual').get(); } catch (e) { console.warn(e); } }
+  const rc = await atualizarCotacaoAuto(FID, FAZ, false).catch(() => ({ mudou: false }));
+  if (!s.exists || !s.data().geral || s.data().pendente || rc.mudou) { try { await recalcularResumo(FID); s = await sub(FID, 'resumo').doc('atual').get(); } catch (e) { console.warn(e); } }
   if (!s.exists || !s.data().geral) { $('#app').innerHTML = '<div class="vazio">O rebanho ainda não foi cadastrado.</div>'; return; }
   R = s.data();
   FIN = (await sub(FID, 'resumo').doc('financeiro').get()).data() || {};
@@ -77,7 +78,7 @@ function render() {
   <div class="seletor" style="margin-top:10px">${[['geral', 'Visão geral'], ...retiros.map(([id]) => [id, nomes[id] || 'Retiro'])].map(([id, n]) => `<button class="btn ${VISAO === id ? '' : 'sec'} peq" data-v="${id}">${U.esc(n)}</button>`).join('')}</div>
   <div class="hero"><div class="rot">Valor estimado do rebanho ${VISAO === 'geral' ? '' : '– ' + U.esc(nomes[VISAO] || '')}</div><div class="val">${U.brl(b.valor)}</div>
     <div class="det">${U.n(b.cabecas)} cabeças · ${U.n(b.arrobas)} arrobas de carcaça · ${U.n(b.pesoTotal / 1000, 1)} t de peso vivo</div>
-    <div class="det" style="margin-top:6px">${cot.arrobaBoi ? `Cotação ${U.esc(cot.uf || '')}: boi ${U.brl2(cot.arrobaBoi)}/@${cot.arrobaVaca ? ` · vaca ${U.brl2(cot.arrobaVaca)}/@` : ''} · ${U.esc(cot.fonte || '')} ${U.dataBR(cot.data)}` : 'Cotação da arroba ainda não cadastrada'}</div></div>
+    <div class="det" style="margin-top:6px">${cot.arrobaBoi ? `Arroba do boi ${U.brl2(cot.arrobaBoi)} (${U.esc(cot.fonteBoi || cot.fonte || '')}${cot.data ? ', ' + U.esc(cot.data) : ''})${cot.arrobaVaca ? ` · vaca ${U.brl2(cot.arrobaVaca)} (${U.esc(cot.fonteVaca || '')})` : ''}` : 'Cotação da arroba ainda não disponível'}</div></div>
   <div class="grid g4">
     <div class="kpi"><div class="rot">Cabeças</div><div class="val">${U.n(b.cabecas)}</div><div class="det">${U.n(b.machos)} machos · ${U.n(b.femeas)} fêmeas</div></div>
     <div class="kpi"><div class="rot">Peso médio</div><div class="val">${U.n(b.pesoMedio)} kg</div><div class="det">${b.gmdMedio != null ? `ganho médio ${U.n(b.gmdMedio, 3)} kg/dia` : 'ganho ainda não medido'}</div></div>
