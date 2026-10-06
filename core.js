@@ -283,10 +283,37 @@ function retirosPermitidos(retiros) {
   return retiros.filter(r => p.retiros.includes(r.id));
 }
 
-async function carregarCotacao(uf) {
-  if (!uf) return null;
-  const s = await db.collection('cotacoes').doc(uf).get().catch(() => null);
-  return s && s.exists ? s.data() : null;
+// cotação usada nos cálculos: arroba do boi/vaca automática da praça da fazenda
+// + preços de reposição (R$/cabeça) e valores manuais de reserva cadastrados por estado
+async function carregarCotacao(uf, fid) {
+  const [m, a] = await Promise.all([
+    uf ? db.collection('cotacoes').doc(uf).get().catch(() => null) : null,
+    fid ? sub(fid, 'resumo').doc('cotacao').get().catch(() => null) : null
+  ]);
+  const manual = m && m.exists ? m.data() : null; const auto = a && a.exists ? a.data() : null;
+  if (!manual && !(auto && auto.boi)) return null;
+  const cot = { ...(manual || {}), cabeca: (manual && manual.cabeca) || {} };
+  cot.fonteBoi = manual && manual.arrobaBoi ? `manual ${uf}` : null; cot.fonteVaca = manual && manual.arrobaVaca ? `manual ${uf}` : null;
+  if (auto && auto.auto !== false && auto.boi && auto.boi.valor) { cot.arrobaBoi = auto.boi.valor; cot.fonteBoi = `${auto.boi.fonte} – ${auto.boi.praca}`; cot.dataBoi = auto.boi.data; }
+  if (auto && auto.auto !== false && auto.vaca && auto.vaca.valor) { cot.arrobaVaca = auto.vaca.valor; cot.fonteVaca = `${auto.vaca.fonte} – ${auto.vaca.praca}`; cot.dataVaca = auto.vaca.data; }
+  cot.fonte = cot.fonteBoi || cot.fonte || null; cot.data = cot.dataBoi || cot.data || null;
+  return cot;
+}
+// busca a arroba da praça mais próxima da cidade da fazenda (função /api/cotacao na Vercel)
+// só busca de novo depois de 24 h, a não ser que forcar = true. Retorna { doc, mudou }
+async function atualizarCotacaoAuto(fid, fazenda, forcar) {
+  const ref = sub(fid, 'resumo').doc('cotacao');
+  if (!fazenda || fazenda.cotacaoAuto === false || !fazenda.uf) return { doc: null, mudou: false };
+  let atual = null; try { const s = await ref.get(); atual = s.exists ? s.data() : null; } catch (e) { }
+  const mesmaPraca = atual && (atual.pracaPedida || '') === (fazenda.praca || '') && (atual.cidade || '') === (fazenda.cidade || '');
+  if (!forcar && mesmaPraca && atual.buscadoEm && Date.now() - atual.buscadoEm < 24 * 3600 * 1000) return { doc: atual, mudou: false };
+  const url = `/api/cotacao?uf=${encodeURIComponent(fazenda.uf)}&cidade=${encodeURIComponent(fazenda.cidade || '')}${fazenda.praca ? '&praca=' + encodeURIComponent(fazenda.praca) : ''}`;
+  let r = null; try { r = await fetch(url).then(x => x.json()); } catch (e) { }
+  if (!r || !r.ok || !r.boi) return { doc: atual, mudou: false, erro: (r && (r.erro || (r.erros || []).join('; '))) || 'sem resposta' };
+  const doc = { tipo: 'cotacao', auto: true, boi: r.boi, vaca: r.vaca || null, opcoes: (r.opcoes || []).slice(0, 40), cidade: fazenda.cidade || '', pracaPedida: fazenda.praca || '', buscadoEm: Date.now() };
+  try { await ref.set(doc); } catch (e) { console.warn(e); }
+  const mudou = !atual || !atual.boi || atual.boi.valor !== r.boi.valor || (atual.vaca && atual.vaca.valor) !== (r.vaca && r.vaca.valor);
+  return { doc, mudou };
 }
 
 // grava muitos documentos em lotes de 400 operações
@@ -302,14 +329,15 @@ async function gravarEmLotes(ops, aoProgresso) {
 // lê todos os animais ativos da fazenda e grava o resumo (lido pelo painel do proprietário)
 async function recalcularResumo(fid) {
   const fsnap = await fz(fid).get(); const fazenda = { id: fid, ...fsnap.data() };
+  await atualizarCotacaoAuto(fid, fazenda, false).catch(() => null);
   const [animais, retiros, cot] = await Promise.all([
     sub(fid, 'animais').where('status', '==', 'ativo').get().then(docs),
     sub(fid, 'retiros').get().then(docs),
-    carregarCotacao(fazenda.uf)
+    carregarCotacao(fazenda.uf, fid)
   ]);
   const r = CALC.resumo(animais, cot, fazenda, retiros);
   const retirosNomes = Object.fromEntries(retiros.map(x => [x.id, x.nome]));
-  const dados = { tipo: 'atual', geral: r.geral, porRetiro: r.porRetiro, retirosNomes, cotacao: cot ? { arrobaBoi: cot.arrobaBoi || null, arrobaVaca: cot.arrobaVaca || null, data: cot.data || null, fonte: cot.fonte || null, uf: fazenda.uf } : null, calculadoEm: U.hoje(), atualizadoEm: ts() };
+  const dados = { tipo: 'atual', geral: r.geral, porRetiro: r.porRetiro, retirosNomes, cotacao: cot ? { arrobaBoi: cot.arrobaBoi || null, arrobaVaca: cot.arrobaVaca || null, data: cot.data || null, fonte: cot.fonte || null, fonteBoi: cot.fonteBoi || null, fonteVaca: cot.fonteVaca || null, dataVaca: cot.dataVaca || null, uf: fazenda.uf } : null, calculadoEm: U.hoje(), atualizadoEm: ts() };
   const mes = U.mes();
   const enxuto = (b) => ({ cabecas: b.cabecas, valor: b.valor, arrobas: b.arrobas, pesoTotal: b.pesoTotal, pesoMedio: b.pesoMedio, taxaPrenhez: b.repro.taxaPrenhez, gmdMedio: b.gmdMedio });
   const hist = { tipo: 'hist', mes, geral: enxuto(r.geral), porRetiro: Object.fromEntries(Object.entries(r.porRetiro).map(([k, v]) => [k, enxuto(v)])), atualizadoEm: ts() };
