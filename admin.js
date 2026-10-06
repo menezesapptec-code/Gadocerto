@@ -61,7 +61,7 @@ async function trocarFazenda(id) {
 }
 async function carregarCadastros() {
   if (!FID) return;
-  const [r, l, m, p, t, cot] = await Promise.all(['retiros', 'lotes', 'medicamentos', 'protocolos', 'touros'].map(n => sub(FID, n).get().then(docs)).concat([carregarCotacao(FAZ.uf)]));
+  const [r, l, m, p, t, cot] = await Promise.all(['retiros', 'lotes', 'medicamentos', 'protocolos', 'touros'].map(n => sub(FID, n).get().then(docs)).concat([carregarCotacao(FAZ.uf, FID)]));
   const ord = (a, b) => (a.nome || '').localeCompare(b.nome || '');
   C.retiros = r.sort(ord); C.lotes = l.sort(ord); C.meds = m.sort(ord); C.protocolos = p.sort(ord); C.touros = t.sort(ord); C.cot = cot;
 }
@@ -118,7 +118,7 @@ TELAS.geral = async (el) => {
   el.innerHTML = `
   <div class="linha"><h2>${U.esc(FAZ.nome)}</h2><span class="tag">${U.esc(FAZ.uf || 'UF?')}</span><span class="esp"></span>
     <span class="muted">Calculado em ${U.dataBR(r.calculadoEm)}</span><button class="btn sec peq" id="btnRecalc">Recalcular agora</button></div>
-  ${!cot || !cot.arrobaBoi ? `<div class="alerta lar">Sem cotação da arroba cadastrada para ${U.esc(FAZ.uf || 'o estado')}. ${ehS() ? 'Cadastre em Configuração › Cotações.' : 'Fale com o administrador.'}</div>` : `<div class="alerta azul">Cotação ${U.esc(cot.uf)}: boi ${U.brl2(cot.arrobaBoi)}/@ · vaca ${U.brl2(cot.arrobaVaca)}/@ · ${U.esc(cot.fonte || '')} ${U.dataBR(cot.data)}</div>`}
+  ${!cot || !cot.arrobaBoi ? `<div class="alerta lar">Sem cotação da arroba para esta fazenda. Confira a cidade e o estado em Configuração › Regras e valoração. <button class="btn sec peq" id="btnCot">Buscar cotação</button></div>` : `<div class="alerta azul linha"><span>Boi <b>${U.brl2(cot.arrobaBoi)}/@</b> <span class="muted">(${U.esc(cot.fonteBoi || cot.fonte || '')}${cot.data ? ', ' + U.esc(cot.data) : ''})</span> · Vaca <b>${cot.arrobaVaca ? U.brl2(cot.arrobaVaca) + '/@' : '—'}</b> <span class="muted">(${U.esc(cot.fonteVaca || '')}${cot.dataVaca ? ', ' + U.esc(cot.dataVaca) : ''})</span></span><span class="esp"></span><button class="btn sec peq" id="btnCot">Atualizar cotação</button></div>`}
   <div class="grid g4">
     <div class="kpi dest"><div class="rot">Valor estimado do rebanho</div><div class="val">${U.brl(g.valor)}</div><div class="det">${U.n(g.arrobas)} @ de carcaça</div></div>
     <div class="kpi"><div class="rot">Cabeças</div><div class="val">${U.n(g.cabecas)}</div><div class="det">${U.n(g.machos)} machos · ${U.n(g.femeas)} fêmeas</div></div>
@@ -135,6 +135,7 @@ TELAS.geral = async (el) => {
   </div>
   <div class="card"><h3>Raças</h3><div>${Object.entries(g.racaDetalhe).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span class="tag verde">${U.esc(k)}: ${U.n(v)}</span>`).join(' ') || '—'}</div></div>`;
   $('#btnRecalc').onclick = async () => { await recalcular(); abrir('geral'); };
+  $('#btnCot').onclick = async () => { toast('Buscando cotação…', 'aviso', 2000); const r = await atualizarCotacaoAuto(FID, FAZ, true); if (!r.doc || !r.doc.boi) return toast('Não consegui buscar a cotação agora: ' + (r.erro || ''), 'erro', 6000); C.cot = await carregarCotacao(FAZ.uf, FID); await recalcular(); abrir('geral'); };
 };
 
 /* ---------- Animais ---------- */
@@ -864,6 +865,7 @@ TELAS.retiros = async (el) => {
 /* ---------- Regras e valoração ---------- */
 TELAS.regras = async (el) => {
   const cfg = CALC.cfg(FAZ);
+  const cotDoc = (await sub(FID, 'resumo').doc('cotacao').get().catch(() => null) || { data: () => null }).data();
   const metodos = [{ id: 'arroba_boi', nome: '@ do boi' }, { id: 'arroba_vaca', nome: '@ da vaca' }, { id: 'cabeca', nome: 'Preço por cabeça' }];
   el.innerHTML = `<h2>Regras e valoração – ${U.esc(FAZ.nome)}</h2>
   <div class="card"><h3>Regras de descarte e reprodução</h3><div class="grid g3">
@@ -874,13 +876,20 @@ TELAS.regras = async (el) => {
   <div class="card"><h3>Como avaliar cada categoria</h3><p class="muted">Arroba = peso vivo × rendimento de carcaça ÷ 15. Bezerros e garrotes normalmente são avaliados por preço de reposição por cabeça.</p>
     ${tabela([{ t: 'Categoria', f: c => c.nome }, { t: 'Método', f: c => `<select data-m="${c.id}">${opcoes(metodos, cfg.metodo[c.id])}</select>` }, { t: 'Rendimento carcaça (%)', f: c => `<input type="number" step="0.1" data-r="${c.id}" value="${cfg.rendimento[c.id]}">` }, { t: 'Peso estimado se sem pesagem (kg)', f: c => `<input type="number" data-p="${c.id}" value="${cfg.pesoPadrao[c.id]}">` }], CATEGORIAS)}
     <button class="btn" id="salvar" style="margin-top:12px">Salvar regras</button></div>
-  <div class="card"><h3>Dados da fazenda</h3><div class="grid g3"><label>Nome<input id="fNome" value="${U.esc(FAZ.nome)}" ${ehS() ? '' : 'disabled'}></label><label>Estado (define a cotação)<select id="fUf" ${ehS() ? '' : 'disabled'}>${opcoes(UFS, FAZ.uf)}</select></label><label>Proprietário<input id="fProp" value="${U.esc(FAZ.proprietario || '')}"></label></div></div>`;
+  <div class="card"><h3>Dados da fazenda e cotação da arroba</h3><div class="grid g3"><label>Nome<input id="fNome" value="${U.esc(FAZ.nome)}" ${ehS() ? '' : 'disabled'}></label><label>Estado<select id="fUf" ${ehS() ? '' : 'disabled'}>${opcoes(UFS, FAZ.uf)}</select></label><label>Cidade<input id="fCid" value="${U.esc(FAZ.cidade || '')}"></label><label>Proprietário<input id="fProp" value="${U.esc(FAZ.proprietario || '')}"></label>
+    <label>Praça de referência<select id="fPraca"><option value="">Automática (mais próxima da cidade)</option>${((cotDoc && cotDoc.opcoes) || []).map(o => `<option value="${U.esc(o.id)}" ${FAZ.praca === o.id ? 'selected' : ''}>${U.esc(o.fonte)} – ${U.esc(o.nome)} (${U.esc(o.uf)})${o.km != null ? ' · ' + o.km + ' km' : ''} · ${U.brl2(o.valor)}</option>`).join('')}</select></label>
+    <label class="chk" style="margin-top:22px"><input type="checkbox" id="fAuto" ${FAZ.cotacaoAuto === false ? '' : 'checked'}>Atualizar arroba automaticamente</label></div>
+    <div id="cotInfo">${cotDoc && cotDoc.boi ? `<div class="alerta azul">Boi: <b>${U.brl2(cotDoc.boi.valor)}/@</b> – ${U.esc(cotDoc.boi.fonte)}, ${U.esc(cotDoc.boi.praca)}${cotDoc.boi.km != null ? ` (${cotDoc.boi.km} km)` : ''}, ${U.esc(cotDoc.boi.data || '')}${cotDoc.vaca ? ` · Vaca: <b>${U.brl2(cotDoc.vaca.valor)}/@</b> – ${U.esc(cotDoc.vaca.fonte)}, ${U.esc(cotDoc.vaca.praca)}` : ''}<br><span class="muted">Buscado em ${new Date(cotDoc.buscadoEm).toLocaleString('pt-BR')}. Atualiza sozinho a cada 24 h. Bezerro, bezerra, garrote e novilha usam o preço por cabeça cadastrado em Cotações (por estado).</span></div>` : '<div class="alerta lar">Cotação automática ainda não buscada.</div>'}</div>
+    <p class="muted">Salve as regras para aplicar a cidade/praça.</p></div>`;
   $('#salvar').onclick = async () => {
     const config = { regras: { maxIatfFalhas: U.num($('#rIatf').value) || 0, idadeMaxVacaAnos: U.num($('#rIdade').value) || 0, diasGestacao: U.num($('#rGest').value) || 285 }, metodo: {}, rendimento: {}, pesoPadrao: {} };
     CATEGORIAS.forEach(c => { config.metodo[c.id] = $(`[data-m=${c.id}]`).value; config.rendimento[c.id] = U.num($(`[data-r=${c.id}]`).value) || 50; config.pesoPadrao[c.id] = U.num($(`[data-p=${c.id}]`).value) || 0; });
-    const upd = { config, proprietario: $('#fProp').value.trim() }; if (ehS()) { upd.nome = $('#fNome').value.trim(); upd.uf = $('#fUf').value; }
-    await fz(FID).update(upd); Object.assign(FAZ, upd); C.cot = await carregarCotacao(FAZ.uf);
-    toast('Regras salvas. Recalculando…'); await recalcularResumo(FID); toast('Pronto');
+    const upd = { config, proprietario: $('#fProp').value.trim(), cidade: $('#fCid').value.trim(), praca: $('#fPraca').value, cotacaoAuto: $('#fAuto').checked }; if (ehS()) { upd.nome = $('#fNome').value.trim(); upd.uf = $('#fUf').value; }
+    await fz(FID).update(upd); Object.assign(FAZ, upd);
+    if (upd.cotacaoAuto) { const rc = await atualizarCotacaoAuto(FID, FAZ, true); if (!rc.doc || !rc.doc.boi) toast('Não consegui buscar a cotação: ' + (rc.erro || ''), 'aviso', 6000); }
+    else await sub(FID, 'resumo').doc('cotacao').set({ auto: false }, { merge: true });
+    C.cot = await carregarCotacao(FAZ.uf, FID);
+    toast('Regras salvas. Recalculando…'); await recalcularResumo(FID); toast('Pronto'); abrir('regras');
   };
 };
 
@@ -950,11 +959,15 @@ TELAS.fazendas = async (el) => {
   const form = (f) => {
     f = f || {};
     modal(f.id ? 'Editar fazenda' : 'Nova fazenda', `<div class="grid g2"><label>Nome *<input name="nome" value="${U.esc(f.nome || '')}"></label><label>Estado *<select name="uf">${opcoes(UFS, f.uf || 'MT')}</select></label>
-      <label>Cidade<input name="cidade" value="${U.esc(f.cidade || '')}"></label><label>Proprietário<input name="proprietario" value="${U.esc(f.proprietario || '')}"></label>
+      <label>Cidade * (define a praça da arroba)<input name="cidade" value="${U.esc(f.cidade || '')}" placeholder="ex.: Barra do Garças"></label><label>Proprietário<input name="proprietario" value="${U.esc(f.proprietario || '')}"></label>
       <label>Mensalidade (R$)<input type="number" name="mensalidade" value="${f.mensalidade || ''}"></label><label>Telefone<input name="telefone" value="${U.esc(f.telefone || '')}"></label></div>`, {
       aoSalvar: async (el2) => {
-        const d = lerForm(el2); if (!d.nome) throw new Error('Informe o nome'); const o = { ...d, mensalidade: U.num(d.mensalidade) };
-        if (f.id) await fz(f.id).update(o); else { const ref = await db.collection('fazendas').add({ ...o, config: CONFIG_PADRAO, criadoEm: ts() }); await sub(ref.id, 'retiros').add({ nome: 'Sede', criadoEm: ts() }); }
+        const d = lerForm(el2); if (!d.nome) throw new Error('Informe o nome'); if (!d.cidade) throw new Error('Informe a cidade (é por ela que o sistema acha a cotação da arroba)'); const o = { ...d, mensalidade: U.num(d.mensalidade) };
+        let id = f.id;
+        if (id) await fz(id).update(o); else { const ref = await db.collection('fazendas').add({ ...o, config: CONFIG_PADRAO, cotacaoAuto: true, criadoEm: ts() }); id = ref.id; await sub(id, 'retiros').add({ nome: 'Sede', criadoEm: ts() }); }
+        const rc = await atualizarCotacaoAuto(id, { ...f, ...o }, true);
+        if (rc.doc && rc.doc.boi) toast(`Arroba: ${rc.doc.boi.fonte} – ${rc.doc.boi.praca}: ${U.brl2(rc.doc.boi.valor)}/@`, 'ok', 6000); else toast('Fazenda salva, mas não consegui buscar a cotação agora', 'aviso', 6000);
+        if (id === FID) { Object.assign(FAZ, o); C.cot = await carregarCotacao(FAZ.uf, FID); }
         SESSAO.fazendas = await carregarFazendas(SESSAO.perfil); montarSeletor();
         if (!FID && SESSAO.fazendas.length) await trocarFazenda(SESSAO.fazendas[0].id); else abrir('fazendas');
       }
@@ -969,8 +982,8 @@ TELAS.cotacoes = async (el) => {
   const ufsUsadas = [...new Set(SESSAO.fazendas.map(f => f.uf).filter(Boolean))];
   const todas = [...new Set([...ufsUsadas, ...l.map(c => c.id)])].sort();
   const porUf = Object.fromEntries(l.map(c => [c.id, c]));
-  el.innerHTML = `<div class="linha"><h2>Cotações por estado</h2><span class="esp"></span><select id="novaUf" style="max-width:100px">${opcoes(UFS.filter(u => !todas.includes(u)), '', '+ UF')}</select></div>
-  <div class="alerta azul">Atualize semanalmente com o boletim do órgão de cada estado (ex.: IMEA no MT). Ao salvar, o valor do rebanho de todas as fazendas do estado é recalculado.</div>
+  el.innerHTML = `<div class="linha"><h2>Cotações por estado (reposição e reserva)</h2><span class="esp"></span><select id="novaUf" style="max-width:100px">${opcoes(UFS.filter(u => !todas.includes(u)), '', '+ UF')}</select></div>
+  <div class="alerta azul">A <b>arroba do boi e da vaca</b> é buscada automaticamente para cada fazenda, pela praça mais próxima da cidade (IMEA no MT; Scot Consultoria e Datagro nos outros estados). Aqui você cadastra o <b>preço por cabeça da reposição</b> (bezerro, bezerra, garrote, novilha) e valores de arroba de <b>reserva</b>, usados só se a busca automática falhar.</div>
   ${todas.map(uf => { const c = porUf[uf] || {}; const cab = c.cabeca || {}; return `<div class="card" data-uf="${uf}"><div class="linha"><h3>${uf}</h3><span class="muted">${c.data ? 'Atualizado em ' + U.dataBR(c.data) : 'Sem cotação'} ${c.fonte ? '· ' + U.esc(c.fonte) : ''}</span></div>
     <div class="grid g4"><label>@ boi gordo (R$)<input type="number" step="0.01" data-k="arrobaBoi" value="${c.arrobaBoi || ''}"></label><label>@ vaca gorda (R$)<input type="number" step="0.01" data-k="arrobaVaca" value="${c.arrobaVaca || ''}"></label>
     <label>Fonte<input data-k="fonte" value="${U.esc(c.fonte || FONTES_SUGERIDAS[uf] || '')}"></label><label>Data do boletim<input type="date" data-k="data" value="${c.data || U.hoje()}"></label>
@@ -984,7 +997,7 @@ TELAS.cotacoes = async (el) => {
     const batch = db.batch(); batch.set(db.collection('cotacoes').doc(uf), o); batch.set(db.collection('cotacoes').doc(uf).collection('historico').doc(o.data || U.hoje()), o); await batch.commit();
     toast(`Cotação ${uf} salva. Recalculando fazendas…`);
     for (const f of SESSAO.fazendas.filter(f => f.uf === uf)) { try { await recalcularResumo(f.id); } catch (e) { console.warn(e); } }
-    if (FAZ && FAZ.uf === uf) C.cot = await carregarCotacao(uf);
+    if (FAZ && FAZ.uf === uf) C.cot = await carregarCotacao(uf, FID);
     toast('Valores atualizados'); abrir('cotacoes');
   });
 };
