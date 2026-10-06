@@ -17,7 +17,7 @@ const MENU = [
   ['Reprodução', [['protocolos', 'Protocolos IATF'], ['touros', 'Touros e sêmen'], ['descarte', 'Descarte'], ['partos', 'Previsão de partos']]],
   ['Manejo', [['manejos', 'Manejos realizados']]],
   ['Relatórios', [['relatorios', 'Relatórios']]],
-  ['Configuração', [['retiros', 'Retiros e lotes'], ['regras', 'Regras e valoração'], ['usuarios', 'Usuários', 1], ['fazendas', 'Fazendas', 1], ['cotacoes', 'Cotações da arroba', 1]]]
+  ['Configuração', [['retiros', 'Retiros e lotes'], ['regras', 'Regras e valoração'], ['usuarios', 'Usuários e acessos'], ['fazendas', 'Fazendas', 1], ['cotacoes', 'Cotações da arroba', 1]]]
 ];
 
 /* ---------- inicialização ---------- */
@@ -797,40 +797,60 @@ TELAS.regras = async (el) => {
 
 /* ---------- Usuários (superadmin) ---------- */
 TELAS.usuarios = async (el) => {
-  const l = docs(await db.collection('usuarios').get()).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+  // superadmin vê todos os usuários; gerente vê a equipe da fazenda atual e só cadastra vaqueiro/operador
+  const S = ehS();
+  const l = (S ? docs(await db.collection('usuarios').get()).map(u => ({ ...u, uid: u.id })) : docs(await sub(FID, 'equipe').get()).map(u => ({ ...u, uid: u.id })))
+    .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
   const nomeFaz = (id) => (SESSAO.fazendas.find(f => f.id === id) || {}).nome || id;
   const PAP = { gerente: 'Gerente (admin da fazenda)', operador: 'Operador de curral', vaqueiro: 'Vaqueiro', proprietario: 'Proprietário (só visualiza)' };
-  el.innerHTML = `<div class="linha"><h2>Usuários</h2><span class="esp"></span><button class="btn" id="novo">+ Novo usuário</button></div>
-  <div class="card">${tabela([{ t: 'Nome', f: u => `<b>${U.esc(u.nome)}</b><div class="muted">${U.esc(u.email)}</div>` }, { t: 'Papel', f: u => PAP[u.papel] || u.papel }, { t: 'Fazendas', f: u => (u.fazendas || []).map(f => `<span class="tag">${U.esc(nomeFaz(f))}</span>`).join(' ') }, { t: 'Retiros', f: u => u.retiros && u.retiros.length ? `${u.retiros.length} retiro(s)` : 'Todos' }, { t: '', f: u => u.ativo === false ? '<span class="tag verm">bloqueado</span>' : '' }], l, { clique: 1, vazio: 'Nenhum usuário.' })}</div>`;
+  const PAP_GER = { vaqueiro: PAP.vaqueiro, operador: PAP.operador };
+  const podeEditar = (u) => S || ['vaqueiro', 'operador'].includes(u.papel);
+  el.innerHTML = `<div class="linha"><h2>${S ? 'Usuários e acessos' : 'Equipe – ' + U.esc(FAZ.nome)}</h2><span class="esp"></span><button class="btn" id="novo">+ ${S ? 'Novo usuário' : 'Cadastrar vaqueiro / operador'}</button></div>
+  ${S ? '<div class="alerta azul">Você (superadmin) cria fazendas, gerentes e proprietários. O gerente de cada fazenda cadastra os próprios vaqueiros e operadores.</div>' : '<div class="alerta azul">Aqui você cadastra os vaqueiros e operadores de curral desta fazenda. Gerente e proprietário são liberados pelo administrador do sistema.</div>'}
+  <div class="card">${tabela([{ t: 'Nome', f: u => `<b>${U.esc(u.nome)}</b><div class="muted">${U.esc(u.email)}</div>` }, { t: 'Papel', f: u => PAP[u.papel] || u.papel }, ...(S ? [{ t: 'Fazendas', f: u => (u.fazendas || []).map(f => `<span class="tag">${U.esc(nomeFaz(f))}</span>`).join(' ') }] : []), { t: 'Retiros', f: u => u.retiros && u.retiros.length ? u.retiros.map(r => U.esc(nomeRetiro(r))).join(', ') : 'Todos' }, { t: '', f: u => u.ativo === false ? '<span class="tag verm">bloqueado</span>' : '' }], l, { clique: 1, vazio: 'Nenhum usuário.' })}</div>`;
+  const resumoEquipe = (uid, d) => ({ nome: d.nome, email: d.email, papel: d.papel, retiros: d.retiros || [], ativo: d.ativo !== false, atualizadoEm: ts() });
   const form = async (u) => {
+    if (u && !podeEditar(u)) return toast('Só o administrador do sistema altera gerente e proprietário', 'aviso');
     u = u || { fazendas: FID ? [FID] : [], papel: 'vaqueiro' };
     const retirosFaz = FID ? C.retiros : [];
-    modal(u.uid ? `Editar ${u.nome}` : 'Novo usuário', `<div class="grid g2">
-      <label>Nome *<input name="nome" value="${U.esc(u.nome || '')}"></label><label>Papel<select name="papel">${opcoes(Object.entries(PAP).map(([id, nome]) => ({ id, nome })), u.papel)}</select></label>
+    const papeis = S ? PAP : PAP_GER;
+    modal(u.uid ? `Editar ${u.nome}` : (S ? 'Novo usuário' : 'Novo vaqueiro / operador'), `<div class="grid g2">
+      <label>Nome *<input name="nome" value="${U.esc(u.nome || '')}"></label><label>Papel<select name="papel">${opcoes(Object.entries(papeis).map(([id, nome]) => ({ id, nome })), u.papel)}</select></label>
       ${u.uid ? `<label>E-mail<input value="${U.esc(u.email)}" disabled></label>` : '<label>E-mail *<input type="email" name="email"></label><label>Senha inicial * (mín. 6)<input name="senha"></label>'}</div>
-      <h3>Fazendas</h3>${SESSAO.fazendas.map(f => `<label class="chk"><input type="checkbox" data-f="${f.id}" ${(u.fazendas || []).includes(f.id) ? 'checked' : ''}>${U.esc(f.nome)}</label>`).join('')}
-      ${retirosFaz.length ? `<h3 style="margin-top:10px">Restringir a retiros de ${U.esc(FAZ.nome)} (vazio = todos)</h3>${retirosFaz.map(r => `<label class="chk"><input type="checkbox" data-r="${r.id}" ${(u.retiros || []).includes(r.id) ? 'checked' : ''}>${U.esc(r.nome)}</label>`).join('')}` : ''}
+      ${S ? `<h3>Fazendas</h3>${SESSAO.fazendas.map(f => `<label class="chk"><input type="checkbox" data-f="${f.id}" ${(u.fazendas || []).includes(f.id) ? 'checked' : ''}>${U.esc(f.nome)}</label>`).join('')}` : ''}
+      ${retirosFaz.length ? `<h3 style="margin-top:10px">Restringir a retiros de ${U.esc(FAZ.nome)} (nenhum marcado = todos)</h3>${retirosFaz.map(r => `<label class="chk"><input type="checkbox" data-r="${r.id}" ${(u.retiros || []).includes(r.id) ? 'checked' : ''}>${U.esc(r.nome)}</label>`).join('')}` : ''}
       ${u.uid ? `<label class="chk" style="margin-top:10px"><input type="checkbox" name="bloq" ${u.ativo === false ? 'checked' : ''}>Bloquear acesso</label><button class="btn sec peq" id="reset" type="button">Enviar e-mail de troca de senha</button>` : ''}`, {
       aoAbrir: (f) => { if ($('#reset', f)) $('#reset', f).onclick = async () => { await auth.sendPasswordResetEmail(u.email); toast('E-mail enviado'); }; },
       aoSalvar: async (f) => {
-        const d = lerForm(f); const fazendas = $$('[data-f]', f).filter(c => c.checked).map(c => c.dataset.f); const retiros = $$('[data-r]', f).filter(c => c.checked).map(c => c.dataset.r);
+        const d = lerForm(f);
+        const fazendas = S ? $$('[data-f]', f).filter(c => c.checked).map(c => c.dataset.f) : (u.uid ? (u.fazendas || [FID]) : [FID]);
+        const retiros = $$('[data-r]', f).filter(c => c.checked).map(c => c.dataset.r);
         if (!d.nome || !fazendas.length) throw new Error('Informe nome e ao menos uma fazenda');
+        if (!S && !['vaqueiro', 'operador'].includes(d.papel)) throw new Error('Papel não permitido');
         const dados = { nome: d.nome, papel: d.papel, fazendas, retiros, ativo: !d.bloq };
-        if (u.uid) { await db.collection('usuarios').doc(u.uid).update(dados); }
-        else {
+        let uid = u.uid, email = u.email;
+        if (uid) {
+          if (!S) { const atual = (await db.collection('usuarios').doc(uid).get()).data() || {}; dados.fazendas = atual.fazendas || [FID]; }
+          await db.collection('usuarios').doc(uid).update(dados);
+        } else {
           if (!d.email || (d.senha || '').length < 6) throw new Error('E-mail e senha (mín. 6) obrigatórios');
           const sec = firebase.apps.find(a => a.name === 'sec') || firebase.initializeApp(APP.firebaseConfig, 'sec');
           const secAuth = sec.auth(); if (location.search.includes('emu=1')) { try { secAuth.useEmulator('http://127.0.0.1:9099'); } catch (e) { } }
-          let uid;
           try { const cred = await secAuth.createUserWithEmailAndPassword(d.email, d.senha); uid = cred.user.uid; await secAuth.signOut(); }
-          catch (e) { if (e.code === 'auth/email-already-in-use') throw new Error('Esse e-mail já tem conta. Peça para a pessoa entrar uma vez ou use outro e-mail.'); throw e; }
-          await db.collection('usuarios').doc(uid).set({ ...dados, uid, email: d.email.toLowerCase(), criadoEm: ts() });
+          catch (e) { if (e.code === 'auth/email-already-in-use') throw new Error('Esse e-mail já tem conta no sistema. Use outro e-mail ou peça ao administrador.'); if (e.code === 'auth/invalid-email') throw new Error('E-mail inválido'); throw e; }
+          email = d.email.toLowerCase();
+          await db.collection('usuarios').doc(uid).set({ ...dados, uid, email, criadoPor: SESSAO.user.email, criadoEm: ts() });
         }
+        // lista da equipe dentro de cada fazenda (é o que o gerente enxerga)
+        const b = db.batch(); const eq = resumoEquipe(uid, { ...dados, email });
+        dados.fazendas.forEach(fid => b.set(sub(fid, 'equipe').doc(uid), eq));
+        if (S) (u.fazendas || []).filter(fid => !dados.fazendas.includes(fid)).forEach(fid => b.delete(sub(fid, 'equipe').doc(uid)));
+        await b.commit().catch(e => console.warn('equipe', e));
         toast('Usuário salvo'); abrir('usuarios');
       }
     });
   };
-  ligarCliques(el, l, u => form({ ...u, uid: u.id })); $('#novo').onclick = () => form(null);
+  ligarCliques(el, l, u => form(u)); $('#novo').onclick = () => form(null);
 };
 
 /* ---------- Fazendas (superadmin) ---------- */
