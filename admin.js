@@ -279,76 +279,153 @@ function formAnimal(a) {
 
 /* ---------- Importar Excel ---------- */
 const CAMPOS_IMPORT = [
-  ['brinco', 'Brinco *', ['brinco', 'numero', 'nº', 'n°', 'no', 'id', 'identificacao', 'animal', 'manejo']],
-  ['eletronico', 'Brinco eletrônico/chip', ['eletronico', 'chip', 'rfid', 'sisbov', 'bot']],
+  ['brinco', 'Brinco *', ['brinco', 'brinco visual', 'n brinco', 'nº brinco', 'n° brinco', 'numero brinco', 'numero do brinco', 'numero', 'identificacao', 'id animal', 'animal', 'manejo', 'nº', 'n°', 'no', 'id', 'rgn', 'rgd', 'tag']],
+  ['eletronico', 'Brinco eletrônico/chip', ['eletronico', 'brinco eletronico', 'chip', 'rfid', 'sisbov', 'bot', 'bastao', 'transponder']],
   ['nome', 'Nome', ['nome', 'apelido']],
-  ['sexo', 'Sexo', ['sexo']],
-  ['categoria', 'Categoria', ['categoria', 'cat', 'era', 'classe']],
-  ['raca', 'Raça', ['raca', 'raça', 'grau de sangue', 'pelagem']],
-  ['nascimento', 'Data de nascimento', ['nascimento', 'nasc', 'data nasc', 'dn']],
-  ['idade', 'Idade (meses)', ['idade', 'meses']],
-  ['peso', 'Peso (kg)', ['peso', 'kg', 'peso atual']],
-  ['dataPeso', 'Data do peso', ['data peso', 'data pesagem', 'pesagem']],
-  ['repro', 'Situação reprodutiva', ['situacao', 'prenhez', 'diagnostico', 'dg', 'reprodu', 'status repro', 'prenha']],
-  ['comCria', 'Parida / com cria', ['parida', 'cria', 'solteira', 'bezerro ao pe']],
-  ['dataPrevParto', 'Previsão de parto', ['previsao', 'parto previsto', 'prev parto']],
-  ['diasGestacao', 'Dias de gestação', ['dias gest', 'gestacao']],
+  ['sexo', 'Sexo', ['sexo', 'sx', 'genero']],
+  ['categoria', 'Categoria', ['categoria', 'categoria animal', 'cat', 'classe', 'tipo', 'era', 'evolucao']],
+  ['raca', 'Raça', ['raca', 'grau de sangue', 'gs', 'composicao racial', 'sangue', 'pelagem']],
+  ['nascimento', 'Data de nascimento', ['nascimento', 'data nascimento', 'data de nascimento', 'dt nasc', 'dt nascimento', 'data nasc', 'nasc', 'dn']],
+  ['idade', 'Idade (meses)', ['idade', 'idade (meses)', 'idade meses', 'idade em meses', 'meses', 'idade atual']],
+  ['idadeAnos', 'Idade (anos)', ['idade (anos)', 'idade anos', 'idade em anos', 'anos']],
+  ['peso', 'Peso (kg)', ['peso', 'peso atual', 'peso (kg)', 'peso vivo', 'peso medio', 'ultimo peso', 'kg']],
+  ['dataPeso', 'Data do peso', ['data peso', 'data do peso', 'data da pesagem', 'data pesagem', 'dt pesagem', 'pesagem']],
+  ['repro', 'Situação reprodutiva', ['situacao', 'situacao reprodutiva', 'status reprodutivo', 'prenhez', 'diagnostico', 'diagnostico de gestacao', 'resultado dg', 'dg', 'reprodutivo', 'reproducao', 'prenha', 'gestante', 'toque', 'status']],
+  ['comCria', 'Parida / com cria', ['parida', 'cria', 'com cria', 'solteira', 'bezerro ao pe', 'cria ao pe', 'amamentando']],
+  ['dataPrevParto', 'Previsão de parto', ['previsao', 'previsao de parto', 'parto previsto', 'prev parto', 'data prevista parto', 'data provavel parto', 'dpp']],
+  ['diasGestacao', 'Idade gestacional', ['idade gestacional', 'idade gest', 'ig', 'dias gestacao', 'dias de gestacao', 'tempo de gestacao', 'gestacao', 'dias prenhez', 'meses gestacao', 'meses de gestacao', 'tempo prenhez']],
   ['desmamado', 'Desmamado (sim/não)', ['desmamado', 'desmama']],
-  ['dataDesmame', 'Data do desmame', ['data desmame', 'desmame']],
-  ['pesoDesmame', 'Peso no desmame', ['peso desmame', 'peso desm']],
-  ['maeBrinco', 'Mãe (brinco)', ['mae', 'mãe', 'matriz']],
-  ['pai', 'Pai / touro', ['pai', 'touro', 'reprodutor', 'semen']],
-  ['retiro', 'Retiro', ['retiro', 'fazenda', 'local']],
-  ['lote', 'Lote / pasto', ['lote', 'pasto', 'invernada']],
-  ['iatfFalhas', 'IATF sem sucesso', ['iatf', 'falha']],
-  ['custoCompra', 'Custo de compra', ['custo', 'valor compra', 'preco']],
-  ['obs', 'Observações', ['obs', 'observ']]
+  ['dataDesmame', 'Data do desmame', ['data desmame', 'data do desmame', 'data da desmama', 'dt desmame', 'desmame']],
+  ['pesoDesmame', 'Peso no desmame', ['peso desmame', 'peso a desmama', 'peso na desmama', 'peso desm']],
+  ['maeBrinco', 'Mãe (brinco)', ['mae', 'brinco mae', 'brinco da mae', 'matriz']],
+  ['pai', 'Pai / touro', ['pai', 'touro', 'reprodutor', 'semen', 'sire']],
+  ['retiro', 'Retiro', ['retiro', 'fazenda', 'local', 'unidade', 'propriedade']],
+  ['lote', 'Lote / pasto', ['lote', 'pasto', 'invernada', 'piquete', 'manga']],
+  ['iatfFalhas', 'IATF sem sucesso', ['iatf sem sucesso', 'falhas iatf', 'iatf', 'falha', 'repasse']],
+  ['custoCompra', 'Custo de compra', ['custo', 'custo compra', 'valor compra', 'preco']],
+  ['obs', 'Observações', ['obs', 'observacao', 'observacoes', 'observ', 'anotacao', 'comentario']]
 ];
 let IMP = null;
 TELAS.importar = async (el) => {
   el.innerHTML = `<h2>Importar rebanho (Excel)</h2>
   <div class="card">
-    <p class="muted">Suba a planilha do jeito que ela está. Na próxima etapa você liga cada coluna ao campo do sistema. Brincos que já existem serão <b>atualizados</b>; os novos serão <b>cadastrados</b>.</p>
+    <p class="muted">Suba a planilha do jeito que ela está. O sistema reconhece as colunas sozinho e mostra a conferência antes de gravar. Brincos que já existem serão <b>atualizados</b>; os novos serão <b>cadastrados</b>.</p>
     <div class="grid g3">
       <label>Arquivo (.xlsx, .xls, .csv)<input type="file" id="arq" accept=".xlsx,.xls,.csv"></label>
-      <label>Retiro padrão (se a planilha não tiver)<select id="retPad">${opcoes(C.retiros, '', '—')}</select></label>
+      <label>Retiro padrão (se a planilha não tiver)<select id="retPad">${opcoes(C.retiros, C.retiros.length === 1 ? C.retiros[0].id : '', '—')}</select></label>
       <label>Data de referência dos dados<input type="date" id="dataRef" value="${U.hoje()}"></label>
     </div>
     <button class="btn sec peq" id="modelo">Baixar planilha modelo</button>
-  </div><div id="passo2"></div>`;
-  $('#modelo').onclick = () => exportarExcel([{ Brinco: '1001', Chip: '', Sexo: 'F', Categoria: 'Vaca', Raca: 'Nelore', Nascimento: '15/03/2020', Peso: 420, DataPeso: '01/10/2026', Situacao: 'Prenha', Parida: 'Sim', PrevisaoParto: '20/01/2027', Desmamado: '', DataDesmame: '', Mae: '', Pai: '', Retiro: 'Sede', Lote: 'Matrizes 1', IATFsemSucesso: 0, Obs: '' }], 'modelo_importacao.xlsx', 'Rebanho');
+  </div><div id="passo2"></div><div id="passo3"></div>`;
+  $('#modelo').onclick = () => exportarExcel([{ Brinco: '1001', Chip: '', Sexo: 'F', Categoria: 'Vaca', Raca: 'Nelore', Nascimento: '15/03/2020', Peso: 420, DataPeso: '01/10/2026', Situacao: 'Prenha', IdadeGestacional: 120, Parida: 'Sim', Desmamado: '', DataDesmame: '', Mae: '', Pai: '', Retiro: 'Sede', Lote: 'Matrizes 1', IATFsemSucesso: 0, Obs: '' }], 'modelo_importacao.xlsx', 'Rebanho');
   $('#arq').onchange = async (e) => {
     const file = e.target.files[0]; if (!file) return;
+    $('#passo2').innerHTML = '<div class="vazio">Lendo planilha…</div>'; $('#passo3').innerHTML = '';
     const wb = XLSX.read(await file.arrayBuffer(), { cellDates: true });
-    const abas = wb.SheetNames; IMP = { wb, aba: abas[0] };
-    lerAba(); renderMapeamento();
+    IMP = { wb, aba: null };
+    // escolhe a aba que tiver mais colunas reconhecidas
+    let melhor = null;
+    for (const nome of wb.SheetNames) { const r = analisarAba(wb.Sheets[nome]); if (r && (!melhor || r.pontos > melhor.pontos)) melhor = { ...r, nome }; }
+    if (!melhor) { $('#passo2').innerHTML = '<div class="alerta verm">Não encontrei dados na planilha.</div>'; return; }
+    aplicarAnalise(melhor);
+    renderMapeamento();
+    if (IMP.mapa.brinco !== undefined) prepararImportacao();
   };
+  $('#retPad').onchange = () => { if (IMP && IMP.mapa.brinco !== undefined) prepararImportacao(); };
 };
-function lerAba() {
-  const ws = IMP.wb.Sheets[IMP.aba];
-  const matriz = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
-  // encontra a linha de cabeçalho (primeira com 2+ textos)
-  let hi = matriz.findIndex(l => l.filter(c => typeof c === 'string' && c.trim()).length >= 2); if (hi < 0) hi = 0;
-  IMP.cab = matriz[hi].map((c, i) => String(c || `Coluna ${i + 1}`).trim());
-  IMP.linhas = matriz.slice(hi + 1).filter(l => l.some(c => c !== '' && c !== null));
-  IMP.mapa = {};
-  const usados = new Set();
-  for (const [campo, , sinon] of CAMPOS_IMPORT) {
-    const idx = IMP.cab.findIndex((h, i) => !usados.has(i) && sinon.some(s => U.sem(h) === U.sem(s)));
-    const idx2 = idx >= 0 ? idx : IMP.cab.findIndex((h, i) => !usados.has(i) && sinon.some(s => U.sem(h).includes(U.sem(s))));
-    if (idx2 >= 0) { IMP.mapa[campo] = idx2; usados.add(idx2); }
-  }
+
+// pontua o casamento de um cabeçalho com um sinônimo
+function casaCab(h, s) {
+  const a = U.sem(h).replace(/[()\[\]:._\-\/]/g, ' ').replace(/\s+/g, ' ').trim(); const b = U.sem(s).replace(/[()\[\]:._\-\/]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!a || !b) return 0;
+  if (a === b) return 100 + b.length;
+  if (b.length > 3 && (` ${a} `).includes(` ${b} `)) return 50 + b.length;   // palavra inteira
+  if (b.length > 4 && a.includes(b)) return 20 + b.length;
+  return 0;
 }
+// liga colunas aos campos (o casamento mais específico vence)
+function mapearCabecalho(cab) {
+  const cand = [];
+  CAMPOS_IMPORT.forEach(([campo, , sinon]) => cab.forEach((h, i) => { let m = 0; sinon.forEach(s => m = Math.max(m, casaCab(h, s))); if (m) cand.push([m, campo, i]); }));
+  cand.sort((x, y) => y[0] - x[0]);
+  const mapa = {}, usadas = new Set();
+  for (const [, campo, i] of cand) if (mapa[campo] === undefined && !usadas.has(i)) { mapa[campo] = i; usadas.add(i); }
+  return mapa;
+}
+function analisarAba(ws) {
+  const matriz = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+  if (!matriz.length) return null;
+  const txt = (c) => (c instanceof Date ? '' : String(c ?? '').trim());
+  let melhor = null;
+  const limite = Math.min(matriz.length, 40);
+  for (let r = 0; r < limite; r++) {
+    const linha = matriz[r].map(txt);
+    if (linha.filter(Boolean).length < 2) continue;
+    const opcoesCab = [linha];
+    if (r > 0) { // cabeçalho em duas linhas (linha de cima mesclada)
+      let ult = ''; const cima = (matriz[r - 1] || []).map(txt).map(v => (v ? (ult = v) : ult));
+      opcoesCab.push(linha.map((v, i) => `${cima[i] || ''} ${v}`.trim()));
+    }
+    for (const cab of opcoesCab) {
+      const mapa = mapearCabecalho(cab); const pontos = Object.keys(mapa).length + (mapa.brinco !== undefined ? 3 : 0);
+      if (!melhor || pontos > melhor.pontos) melhor = { pontos, r, cab, mapa };
+    }
+  }
+  if (!melhor) { melhor = { pontos: 0, r: 0, cab: matriz[0].map(txt), mapa: {} }; }
+  const cab = melhor.cab.map((h, i) => h || `Coluna ${String.fromCharCode(65 + (i % 26))}${i >= 26 ? Math.floor(i / 26) : ''}`);
+  let linhas = matriz.slice(melhor.r + 1).filter(l => l.some(c => c !== '' && c !== null));
+  // descarta linhas de total e cabeçalhos repetidos
+  linhas = linhas.filter(l => { const t = U.sem(l.map(txt).join(' ')); return !/^(total|soma|media)\b/.test(t) && mapearCabecalho(l.map(txt)).brinco === undefined; });
+  const mapa = { ...melhor.mapa };
+  // sem coluna de brinco pelo nome: procura pela cara dos dados (valores curtos e únicos)
+  if (mapa.brinco === undefined) {
+    const usadas = new Set(Object.values(mapa));
+    for (let i = 0; i < cab.length; i++) {
+      if (usadas.has(i)) continue;
+      const vals = linhas.map(l => txt(l[i])).filter(Boolean);
+      if (vals.length < linhas.length * 0.8 || !vals.length) continue;
+      const unicos = new Set(vals).size / vals.length;
+      const forma = vals.filter(v => /^[A-Za-z0-9\-\/.]{1,15}$/.test(v) && !/^\d+[.,]\d+$/.test(v)).length / vals.length;
+      if (unicos > 0.95 && forma > 0.9) { mapa.brinco = i; break; }
+    }
+  }
+  return { pontos: melhor.pontos, cab, linhas, mapa };
+}
+function aplicarAnalise(r) { IMP.aba = r.nome; IMP.cab = r.cab; IMP.linhas = r.linhas; IMP.mapa = r.mapa; }
+function lerAba() { const r = analisarAba(IMP.wb.Sheets[IMP.aba]); if (r) aplicarAnalise({ ...r, nome: IMP.aba }); }
 function renderMapeamento() {
   const cabOps = [{ id: '', nome: '— não usar —' }].concat(IMP.cab.map((h, i) => ({ id: String(i), nome: h })));
-  $('#passo2').innerHTML = `<div class="card"><h3>Ligar colunas</h3>
-    ${IMP.wb.SheetNames.length > 1 ? `<label>Aba da planilha<select id="aba">${opcoes(IMP.wb.SheetNames, IMP.aba)}</select></label>` : ''}
-    <p class="muted">${U.n(IMP.linhas.length)} linhas encontradas.</p>
-    <div class="grid g4">${CAMPOS_IMPORT.map(([c, nome]) => `<label>${nome}<select data-c="${c}">${opcoes(cabOps, IMP.mapa[c] ?? '')}</select></label>`).join('')}</div>
-    <button class="btn" id="prev">Conferir dados</button></div><div id="passo3"></div>`;
-  if ($('#aba')) $('#aba').onchange = (e) => { IMP.aba = e.target.value; lerAba(); renderMapeamento(); };
+  const achou = IMP.mapa.brinco !== undefined;
+  const reconhecidas = CAMPOS_IMPORT.filter(([c]) => IMP.mapa[c] !== undefined);
+  $('#passo2').innerHTML = `<div class="card">
+    ${achou ? `<div class="alerta verde">Planilha reconhecida: <b>${U.n(IMP.linhas.length)} animais</b>${IMP.wb.SheetNames.length > 1 ? ` (aba “${U.esc(IMP.aba)}”)` : ''}.</div>` : '<div class="alerta verm">Não consegui identificar a coluna do <b>brinco</b>. Escolha abaixo qual coluna é o brinco.</div>'}
+    <div>${reconhecidas.map(([c, nome]) => `<span class="tag verde">${nome.replace(' *', '')} ← ${U.esc(IMP.cab[IMP.mapa[c]])}</span>`).join(' ')}</div>
+    <details ${achou ? '' : 'open'} style="margin-top:10px"><summary class="muted" style="cursor:pointer">Ajustar colunas (opcional)</summary>
+      ${IMP.wb.SheetNames.length > 1 ? `<label style="margin-top:10px">Aba da planilha<select id="aba">${opcoes(IMP.wb.SheetNames, IMP.aba)}</select></label>` : ''}
+      <div class="grid g4" style="margin-top:10px">${CAMPOS_IMPORT.map(([c, nome]) => `<label>${nome}<select data-c="${c}">${opcoes(cabOps, IMP.mapa[c] ?? '')}</select></label>`).join('')}</div>
+      <button class="btn" id="prev">Conferir de novo</button></details></div>`;
+  if ($('#aba')) $('#aba').onchange = (e) => { IMP.aba = e.target.value; lerAba(); renderMapeamento(); if (IMP.mapa.brinco !== undefined) prepararImportacao(); };
   $$('#passo2 [data-c]').forEach(s => s.onchange = () => { if (s.value === '') delete IMP.mapa[s.dataset.c]; else IMP.mapa[s.dataset.c] = +s.value; });
   $('#prev').onclick = prepararImportacao;
+}
+// idade em meses a partir de textos como "18", "13-24", "+36", "2 anos", "18 m"
+function idadeMesesDe(v, emAnos) {
+  if (v === '' || v === null || v === undefined) return null;
+  if (typeof v === 'number') return emAnos ? v * 12 : v;
+  const s = U.sem(v);
+  let m = s.match(/(\d+[.,]?\d*)\s*(?:a|-|ate)\s*(\d+[.,]?\d*)/); if (m) { const x = (U.num(m[1]) + U.num(m[2])) / 2; return /ano/.test(s) || emAnos ? x * 12 : x; }
+  m = s.match(/(\d+[.,]?\d*)/); if (!m) return null; let n = U.num(m[1]);
+  if (/[+>]|acima|mais/.test(s)) n += 4;
+  if (/ano/.test(s) || (emAnos && !/mes|m\b/.test(s))) n *= 12;
+  return n;
+}
+// dias de gestação a partir de "120", "4 meses", "4" (meses quando pequeno ou cabeçalho em meses)
+function diasGestDe(v, cabMeses) {
+  if (v === '' || v === null || v === undefined) return null;
+  const s = U.sem(v); const n = U.num(typeof v === 'number' ? v : ((s.match(/(\d+[.,]?\d*)/) || [])[1]));
+  if (n === null || n <= 0) return null;
+  if (/mes/.test(s) || cabMeses || n <= 10) return Math.round(n * 30.4);
+  return Math.round(n);
 }
 async function prepararImportacao() {
   if (IMP.mapa.brinco === undefined) return toast('Ligue a coluna do brinco', 'erro');
@@ -360,19 +437,27 @@ async function prepararImportacao() {
   const ref = $('#dataRef').value || U.hoje(); const retPad = $('#retPad').value || null; const cfg = CALC.cfg(FAZ);
   const v = (l, c) => IMP.mapa[c] === undefined ? '' : l[IMP.mapa[c]];
   const erros = [], avisos = [], registros = []; const vistos = new Set(); const novosRetiros = new Set(), novosLotes = new Set();
+  // coluna "Fazenda" com um único valor é o nome da fazenda, não retiro
+  const ignorarRetiro = IMP.mapa.retiro !== undefined && new Set(IMP.linhas.map(l => U.sem(l[IMP.mapa.retiro])).filter(Boolean)).size <= 1 && /fazenda|propriedade/.test(U.sem(IMP.cab[IMP.mapa.retiro]));
   IMP.linhas.forEach((l, i) => {
     const n = i + 2; const brinco = U.normBrinco(v(l, 'brinco'));
     if (!brinco) { erros.push(`Linha ${n}: sem brinco`); return; }
     if (vistos.has(brinco)) { erros.push(`Linha ${n}: brinco ${brinco} repetido na planilha`); return; }
     vistos.add(brinco);
-    const reproTxt = U.sem(v(l, 'repro'));
+    const reproTxt = U.sem(v(l, 'repro')); const catTxt = U.sem(v(l, 'categoria'));
     let comCria = null; const cc = U.sem(v(l, 'comCria'));
     if (cc) comCria = cc.includes('solteir') || cc === 'nao' || cc === 'n' ? false : (cc.includes('parid') || cc.includes('cria') || U.sim(cc));
-    if (reproTxt.includes('parid')) comCria = true; if (reproTxt.includes('solteir')) comCria = comCria ?? false;
+    for (const t of [reproTxt, catTxt]) { if (t.includes('parid') || t.includes('c/ cria') || t.includes('com cria')) comCria = true; if (t.includes('solteir')) comCria = comCria ?? false; }
     let nasc = U.data(v(l, 'nascimento'));
-    const idade = U.num(v(l, 'idade')); if (!nasc && idade !== null) nasc = U.addDias(ref, -idade * 30.44);
-    let sexo = U.sexo(v(l, 'sexo')); let cat = U.categoria(v(l, 'categoria'));
+    let idade = idadeMesesDe(v(l, 'idade'), false); if (idade === null) idade = idadeMesesDe(v(l, 'idadeAnos'), true);
+    let cat = U.categoria(v(l, 'categoria'));
+    if (idade === null && !cat && /\d/.test(catTxt)) idade = idadeMesesDe(v(l, 'categoria'), false); // "era" em faixa de meses
+    if (!nasc && idade !== null) nasc = U.addDias(ref, -idade * 30.44);
+    const dgDias = diasGestDe(v(l, 'diasGestacao'), IMP.mapa.diasGestacao !== undefined && /mes/.test(U.sem(IMP.cab[IMP.mapa.diasGestacao])));
+    let sexo = U.sexo(v(l, 'sexo'));
+    if (!sexo && /\bmacho\b/.test(catTxt)) sexo = 'M'; if (!sexo && /\bfemea\b/.test(catTxt)) sexo = 'F';
     if (!sexo && cat) sexo = U.sexoDaCategoria(cat);
+    if (!sexo && (dgDias || U.repro(v(l, 'repro')) || comCria)) sexo = 'F';
     if (!cat) { cat = U.sugerirCategoria(sexo, nasc ? U.idadeMeses(nasc, ref) : null, comCria); if (cat) avisos.push(`Linha ${n} (${brinco}): categoria definida como ${CAT_NOME[cat]}`); }
     if (!cat) { erros.push(`Linha ${n} (${brinco}): sem sexo/categoria`); return; }
     if (!sexo) sexo = U.sexoDaCategoria(cat);
@@ -382,17 +467,20 @@ async function prepararImportacao() {
     const raca = U.raca(v(l, 'raca')); if (raca) o.raca = raca;
     if (nasc) o.nascimento = nasc;
     const peso = U.num(v(l, 'peso')); if (peso) { o.pesoAtual = peso; o.dataPeso = U.data(v(l, 'dataPeso')) || ref; }
-    const rp = U.repro(v(l, 'repro')); if (rp) o.repro = rp;
+    let rp = U.repro(v(l, 'repro')) || (/prenh/.test(catTxt) ? 'prenha' : /vazi/.test(catTxt) ? 'vazia' : null);
+    if (!rp && dgDias) rp = 'prenha';
+    if (rp) o.repro = rp;
     if (comCria !== null) o.comCria = comCria;
-    let pp = U.data(v(l, 'dataPrevParto')); const dg = U.num(v(l, 'diasGestacao'));
-    if (!pp && dg && o.repro === 'prenha') pp = U.addDias(ref, cfg.regras.diasGestacao - dg);
+    let pp = U.data(v(l, 'dataPrevParto'));
+    if (!pp && dgDias && o.repro === 'prenha') pp = U.addDias(ref, cfg.regras.diasGestacao - dgDias);
+    if (dgDias && o.repro === 'prenha') o.diasGestacaoImport = dgDias;
     if (pp) o.dataPrevParto = pp;
     const dsm = U.data(v(l, 'dataDesmame')); const dsmS = v(l, 'desmamado');
     if (dsm) { o.desmamado = true; o.dataDesmame = dsm; } else if (dsmS !== '') o.desmamado = U.sim(dsmS);
     const pd = U.num(v(l, 'pesoDesmame')); if (pd) o.pesoDesmame = pd;
     const mae = U.normBrinco(v(l, 'maeBrinco')); if (mae) o.maeBrinco = mae;
     const pai = String(v(l, 'pai') || '').trim(); if (pai) o.pai = pai;
-    const ret = String(v(l, 'retiro') || '').trim();
+    let ret = String(v(l, 'retiro') || '').trim(); if (ignorarRetiro || U.sem(ret) === U.sem(FAZ.nome)) ret = '';
     if (ret) { const id = retPorNome.get(U.sem(ret)); if (id) o.retiroId = id; else { o._retiroNome = ret; novosRetiros.add(ret); } } else if (retPad) o.retiroId = retPad;
     const lote = String(v(l, 'lote') || '').trim();
     if (lote) { const lt = lotePorNome.get(U.sem(lote)); if (lt) o.loteId = lt.id; else { o._loteNome = lote; novosLotes.add(lote); } }
@@ -409,6 +497,7 @@ async function prepararImportacao() {
   $('#passo3').innerHTML = `<div class="card"><h3>Conferência</h3>
     <div class="grid g4"><div class="kpi"><div class="rot">Novos</div><div class="val">${U.n(novos)}</div></div><div class="kpi"><div class="rot">Atualizar existentes</div><div class="val">${U.n(atual)}</div></div><div class="kpi"><div class="rot">Erros (ignorados)</div><div class="val">${erros.length}</div></div><div class="kpi"><div class="rot">Avisos</div><div class="val">${avisos.length}</div></div></div>
     <p>${Object.entries(cont).map(([k, n]) => `<span class="tag verde">${CAT_NOME[k]}: ${n}</span>`).join(' ')}</p>
+    ${registros.some(r => !r.o.retiroId && !r.o._retiroNome) ? `<div class="alerta lar">${U.n(registros.filter(r => !r.o.retiroId && !r.o._retiroNome).length)} animais sem retiro. Escolha o <b>retiro padrão</b> lá em cima antes de importar.</div>` : ''}
     ${IMP.novosRetiros.length ? `<div class="alerta azul">Serão criados os retiros: ${IMP.novosRetiros.map(U.esc).join(', ')}</div>` : ''}
     ${IMP.novosLotes.length ? `<div class="alerta azul">Serão criados os lotes: ${IMP.novosLotes.map(U.esc).join(', ')}</div>` : ''}
     ${erros.length ? `<details><summary>Ver erros</summary><div class="muted">${erros.slice(0, 300).map(U.esc).join('<br>')}</div></details>` : ''}
