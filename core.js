@@ -1,21 +1,21 @@
 /* =====================================================================
-   REBANHO 360 — núcleo compartilhado (core.js)
+   GADO CERTO — núcleo compartilhado (core.js)
    Usado por: index.html, admin.html, manejo.html, vaqueiro.html, proprietario.html
    ===================================================================== */
 
 /* ---------- 1. CONFIGURAÇÃO (edite aqui) ---------- */
 const APP = {
-  nome: 'Rebanho 360',
+  nome: 'Gado Certo',
   // e-mails com acesso total (superadmin)
   superadmins: ['agrosafra7@gmail.com', 'menezesapptec@gmail.com'],
   // Cole aqui a configuração do seu projeto Firebase (Console > Configurações do projeto > Seus apps > Web)
   firebaseConfig: {
-    apiKey: 'COLE_AQUI',
-    authDomain: 'COLE_AQUI.firebaseapp.com',
-    projectId: 'COLE_AQUI',
-    storageBucket: 'COLE_AQUI.appspot.com',
-    messagingSenderId: 'COLE_AQUI',
-    appId: 'COLE_AQUI'
+    apiKey: 'AIzaSyANvTDMstRY7mkJC_hvdw5rGyR-HLkz5qs',
+    authDomain: 'gadocerto-4e07f.firebaseapp.com',
+    projectId: 'gadocerto-4e07f',
+    storageBucket: 'gadocerto-4e07f.firebasestorage.app',
+    messagingSenderId: '479761155928',
+    appId: '1:479761155928:web:c652b99aeb844cb71f472d'
   }
 };
 
