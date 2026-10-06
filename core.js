@@ -44,6 +44,8 @@ const CONFIG_PADRAO = {
   metodo: { bezerro: 'cabeca', bezerra: 'cabeca', garrote: 'cabeca', novilha: 'cabeca', boi: 'arroba_boi', touro: 'arroba_boi', vaca: 'arroba_vaca' },
   // peso estimado (kg) para animal sem pesagem
   pesoPadrao: { bezerro: 200, bezerra: 190, garrote: 300, novilha: 300, boi: 480, touro: 700, vaca: 430 },
+  // base da arroba: 'pe' = gado em pé (peso vivo ÷ 30) | 'carcaca' = peso × rendimento ÷ 15
+  base: 'pe',
   regras: { maxIatfFalhas: 2, idadeMaxVacaAnos: 12, diasGestacao: 285 }
 };
 
@@ -106,27 +108,43 @@ const U = {
 const CALC = {
   cfg(fazenda) {
     const c = (fazenda && fazenda.config) || {};
+    const metodo = { ...CONFIG_PADRAO.metodo, ...(c.metodo || {}) };
+    // preço por categoria: unidade (arroba | cabeca), referência automática (boi | vaca | '') e valor manual (sobrepõe o automático)
+    const precos = {};
+    CATEGORIAS.forEach(({ id }) => {
+      const m = metodo[id]; const base = m === 'cabeca' ? { unidade: 'cabeca', ref: '' } : { unidade: 'arroba', ref: m === 'arroba_vaca' ? 'vaca' : 'boi' };
+      precos[id] = { ...base, valor: null, ...((c.precos || {})[id] || {}) };
+    });
     return {
       rendimento: { ...CONFIG_PADRAO.rendimento, ...(c.rendimento || {}) },
-      metodo: { ...CONFIG_PADRAO.metodo, ...(c.metodo || {}) },
+      metodo, precos, base: c.base || CONFIG_PADRAO.base,
       pesoPadrao: { ...CONFIG_PADRAO.pesoPadrao, ...(c.pesoPadrao || {}) },
       regras: { ...CONFIG_PADRAO.regras, ...(c.regras || {}) }
     };
   },
-  // arrobas de carcaça a partir do peso vivo
-  arrobas(pesoVivo, rendPct) { return (pesoVivo || 0) * (rendPct || 50) / 100 / 15; },
+  // arrobas do animal: em pé (peso vivo ÷ 30) ou de carcaça (peso × rendimento ÷ 15)
+  arrobas(pesoVivo, rendPct, base) { return base === 'carcaca' ? (pesoVivo || 0) * (rendPct || 50) / 100 / 15 : (pesoVivo || 0) / 30; },
+  // preço que vale para a categoria: manual > automático (praça) > reserva do estado
+  preco(cat, cot, cfg) {
+    const p = cfg.precos[cat] || { unidade: 'arroba', ref: 'boi' }; cot = cot || {};
+    const manual = U.num(p.valor);
+    let auto = null, origemAuto = null;
+    if (p.unidade === 'arroba') {
+      if (p.ref === 'boi' && U.num(cot.arrobaBoi)) { auto = U.num(cot.arrobaBoi); origemAuto = cot.fonteBoi || cot.fonte || 'cotação'; }
+      if (p.ref === 'vaca') { if (U.num(cot.arrobaVaca)) { auto = U.num(cot.arrobaVaca); origemAuto = cot.fonteVaca || 'cotação'; } else if (U.num(cot.arrobaBoi)) { auto = U.num(cot.arrobaBoi); origemAuto = (cot.fonteBoi || 'cotação') + ' (boi)'; } }
+    } else if (cot.cabeca && U.num(cot.cabeca[cat])) { auto = U.num(cot.cabeca[cat]); origemAuto = 'tabela do estado'; }
+    if (manual) return { valor: manual, unidade: p.unidade, origem: 'manual', auto, origemAuto };
+    if (auto) return { valor: auto, unidade: p.unidade, origem: 'auto', auto, origemAuto };
+    return { valor: 0, unidade: p.unidade, origem: null, auto: null, origemAuto: null };
+  },
   avaliar(animal, cot, cfg) {
     const cat = animal.categoria || 'boi';
     const pesoReal = U.num(animal.pesoAtual);
     const peso = pesoReal || cfg.pesoPadrao[cat] || 0;
-    const arrobas = CALC.arrobas(peso, cfg.rendimento[cat]);
-    const metodo = cfg.metodo[cat] || 'arroba_boi';
-    let valor = 0;
-    cot = cot || {};
-    if (metodo === 'cabeca') valor = U.num(cot.cabeca && cot.cabeca[cat]) || 0;
-    else if (metodo === 'arroba_vaca') valor = arrobas * (U.num(cot.arrobaVaca) || U.num(cot.arrobaBoi) || 0);
-    else valor = arrobas * (U.num(cot.arrobaBoi) || 0);
-    return { peso, pesoReal: !!pesoReal, arrobas, valor, metodo };
+    const arrobas = CALC.arrobas(peso, cfg.rendimento[cat], cfg.base);
+    const pr = CALC.preco(cat, cot, cfg);
+    const valor = pr.unidade === 'cabeca' ? pr.valor : arrobas * pr.valor;
+    return { peso, pesoReal: !!pesoReal, arrobas, valor, semPreco: !pr.valor };
   },
   avaliarDescarte(animal, cfg, ref) {
     const motivos = [];
@@ -174,16 +192,18 @@ const CALC = {
     const cfg = CALC.cfg(fazenda); const ref = U.hoje();
     const geral = CALC.blocoVazio(); const porRetiro = {};
     (retiros || []).forEach(r => porRetiro[r.id] = CALC.blocoVazio());
+    const semPreco = {};
     for (const a of animais) {
       if (a.status && a.status !== 'ativo') continue;
       const av = CALC.avaliar(a, cot, cfg);
+      if (av.semPreco) semPreco[a.categoria || 'sem'] = (semPreco[a.categoria || 'sem'] || 0) + 1;
       CALC.acumular(geral, a, av, ref);
       const rid = a.retiroId || '_sem';
       if (!porRetiro[rid]) porRetiro[rid] = CALC.blocoVazio();
       CALC.acumular(porRetiro[rid], a, av, ref);
     }
     CALC.finalizar(geral); Object.values(porRetiro).forEach(CALC.finalizar);
-    return { geral, porRetiro };
+    return { geral, porRetiro, semPreco, base: cfg.base };
   },
   // aplica um registro de pesagem no animal; retorna campos a atualizar
   pesagem(animal, peso, data) {
@@ -337,7 +357,7 @@ async function recalcularResumo(fid) {
   ]);
   const r = CALC.resumo(animais, cot, fazenda, retiros);
   const retirosNomes = Object.fromEntries(retiros.map(x => [x.id, x.nome]));
-  const dados = { tipo: 'atual', geral: r.geral, porRetiro: r.porRetiro, retirosNomes, cotacao: cot ? { arrobaBoi: cot.arrobaBoi || null, arrobaVaca: cot.arrobaVaca || null, data: cot.data || null, fonte: cot.fonte || null, fonteBoi: cot.fonteBoi || null, fonteVaca: cot.fonteVaca || null, dataVaca: cot.dataVaca || null, uf: fazenda.uf } : null, calculadoEm: U.hoje(), atualizadoEm: ts() };
+  const dados = { tipo: 'atual', geral: r.geral, porRetiro: r.porRetiro, retirosNomes, semPreco: r.semPreco, base: r.base, cotacao: cot ? { arrobaBoi: cot.arrobaBoi || null, arrobaVaca: cot.arrobaVaca || null, data: cot.data || null, fonte: cot.fonte || null, fonteBoi: cot.fonteBoi || null, fonteVaca: cot.fonteVaca || null, dataVaca: cot.dataVaca || null, uf: fazenda.uf } : null, calculadoEm: U.hoje(), atualizadoEm: ts() };
   const mes = U.mes();
   const enxuto = (b) => ({ cabecas: b.cabecas, valor: b.valor, arrobas: b.arrobas, pesoTotal: b.pesoTotal, pesoMedio: b.pesoMedio, taxaPrenhez: b.repro.taxaPrenhez, gmdMedio: b.gmdMedio });
   const hist = { tipo: 'hist', mes, geral: enxuto(r.geral), porRetiro: Object.fromEntries(Object.entries(r.porRetiro).map(([k, v]) => [k, enxuto(v)])), atualizadoEm: ts() };
