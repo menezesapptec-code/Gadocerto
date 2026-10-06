@@ -77,7 +77,7 @@ function render() {
   <div class="linha"><h2 style="margin:0">${U.esc(FAZ.nome)}</h2><span class="muted">Atualizado em ${U.dataBR(R.calculadoEm)}</span></div>
   <div class="seletor" style="margin-top:10px">${[['geral', 'Visão geral'], ...retiros.map(([id]) => [id, nomes[id] || 'Retiro'])].map(([id, n]) => `<button class="btn ${VISAO === id ? '' : 'sec'} peq" data-v="${id}">${U.esc(n)}</button>`).join('')}</div>
   <div class="hero"><div class="rot">Valor estimado do rebanho ${VISAO === 'geral' ? '' : '– ' + U.esc(nomes[VISAO] || '')}</div><div class="val">${U.brl(b.valor)}</div>
-    <div class="det">${U.n(b.cabecas)} cabeças · ${U.n(b.arrobas)} arrobas de carcaça · ${U.n(b.pesoTotal / 1000, 1)} t de peso vivo</div>
+    <div class="det">${U.n(b.cabecas)} cabeças · ${U.n(b.arrobas)} arrobas ${R.base === "carcaca" ? "de carcaça" : "em pé"} · ${U.n(b.pesoTotal / 1000, 1)} t de peso vivo</div>
     <div class="det" style="margin-top:6px">${cot.arrobaBoi ? `Arroba do boi ${U.brl2(cot.arrobaBoi)} (${U.esc(cot.fonteBoi || cot.fonte || '')}${cot.data ? ', ' + U.esc(cot.data) : ''})${cot.arrobaVaca ? ` · vaca ${U.brl2(cot.arrobaVaca)} (${U.esc(cot.fonteVaca || '')})` : ''}` : 'Cotação da arroba ainda não disponível'}</div></div>
   <div class="grid g4">
     <div class="kpi"><div class="rot">Cabeças</div><div class="val">${U.n(b.cabecas)}</div><div class="det">${U.n(b.machos)} machos · ${U.n(b.femeas)} fêmeas</div></div>
@@ -123,7 +123,7 @@ function render() {
 
   ${VISAO === 'geral' && retiros.length > 1 ? `<div class="card"><h3>Comparativo entre retiros</h3><div class="tabela-box"><table><thead><tr><th>Retiro</th><th class="n">Cabeças</th><th class="n">Valor</th><th class="n">Peso médio</th><th class="n">GMD</th><th class="n">Prenhez</th><th class="n">Sanidade ${U.mesBR(mes)}</th><th class="n">Por cabeça</th></tr></thead><tbody>
     ${retiros.map(([id, x]) => { const sv = ((FIN.sanitario || {})[mes] || {})['r_' + id] || 0; return `<tr><td>${U.esc(nomes[id] || '')}</td><td class="n">${U.n(x.cabecas)}</td><td class="n">${U.brl(x.valor)}</td><td class="n">${U.n(x.pesoMedio)} kg</td><td class="n">${x.gmdMedio != null ? U.n(x.gmdMedio, 3) : '—'}</td><td class="n">${pct(x.repro.taxaPrenhez)}</td><td class="n">${U.brl(sv)}</td><td class="n">${U.brl2(sv / x.cabecas)}</td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
-  <p class="muted" style="text-align:center">Painel somente para visualização. Valores estimados pela cotação da arroba do estado e pelo rendimento de carcaça configurado.</p>`;
+  <p class="muted" style="text-align:center">Painel somente para visualização. Valores estimados pela cotação da arroba da região e pelos preços definidos para cada categoria.</p>`;
 
   $$('[data-v]').forEach(bt => bt.onclick = () => { VISAO = bt.dataset.v; render(); });
   if (!window.Chart) return;
