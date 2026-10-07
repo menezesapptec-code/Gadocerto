@@ -17,7 +17,7 @@ const MENU = [
   ['Reprodução', [['protocolos', 'Protocolos IATF'], ['touros', 'Touros e sêmen'], ['descarte', 'Descarte'], ['partos', 'Previsão de partos']]],
   ['Manejo', [['manejos', 'Manejos realizados']]],
   ['Relatórios', [['relatorios', 'Relatórios']]],
-  ['Configuração', [['retiros', 'Retiros e lotes'], ['regras', 'Preços e regras'], ['usuarios', 'Usuários e acessos'], ['fazendas', 'Fazendas', 1], ['cotacoes', 'Cotações da arroba', 1]]]
+  ['Configuração', [['retiros', 'Retiros e lotes'], ['regras', 'Preços e regras'], ['usuarios', 'Usuários e acessos'], ['fazendas', 'Fazendas', 1], ['cotacoes', 'Cotações da arroba', 1], ['demo', 'Dados de demonstração', 1]]]
 ];
 
 /* ---------- inicialização ---------- */
@@ -707,12 +707,34 @@ TELAS.custos = async (el) => {
 /* ---------- Medicamentos ---------- */
 TELAS.medicamentos = async (el) => {
   await carregarCadastros();
-  el.innerHTML = `<div class="linha"><h2>Medicamentos</h2><span class="esp"></span><button class="btn" id="novo">+ Cadastrar</button></div>
+  el.innerHTML = `<div class="linha"><h2>Medicamentos</h2><span class="esp"></span><button class="btn sec" id="colar">Colar lista do Excel</button><button class="btn" id="novo">+ Cadastrar</button></div>
   <div class="card">${tabela([{ t: 'Nome', f: m => `<b>${U.esc(m.nome)}</b><div class="muted">${U.esc(m.tipo || '')}</div>` }, { t: 'Frasco', f: m => `${U.n(m.volume)} ${U.esc(m.unidade || 'ml')} · ${U.brl2(m.precoFrasco)}` }, { t: 'Custo/unid.', n: 1, f: m => U.brl2((m.precoFrasco || 0) / (m.volume || 1)) }, { t: 'Dose padrão', n: 1, f: m => m.dosePadrao ? `${m.dosePadrao} ${m.unidade || 'ml'} = ${U.brl2(CALC.custoDose(m, m.dosePadrao))}` : '—' }, { t: 'Carência', n: 1, f: m => m.carenciaDias ? m.carenciaDias + ' dias' : '—' }, { t: 'Estoque', n: 1, f: m => { const fr = (m.estoque || 0) / (m.volume || 1); const baixo = m.estoqueMin && fr <= m.estoqueMin; return `<span class="tag ${baixo ? 'verm' : 'verde'}">${U.n(fr, 1)} frascos</span>`; } }, { t: '', f: m => `<button class="btn sec peq" data-ent="${m.id}">Entrada</button>` }], C.meds, { clique: 1, vazio: 'Nenhum medicamento cadastrado.' })}</div>`;
   ligarCliques(el, C.meds, formMed);
   $$('[data-ent]').forEach(b => b.onclick = (e) => { e.stopPropagation(); const m = C.meds.find(x => x.id === b.dataset.ent); modal(`Entrada de estoque – ${m.nome}`, `<div class="grid g2"><label>Frascos comprados<input type="number" name="fr"></label><label>Novo preço do frasco (opcional)<input type="number" step="0.01" name="preco" placeholder="${m.precoFrasco}"></label></div>`, { aoSalvar: async (f) => { const d = lerForm(f); const fr = U.num(d.fr); if (!fr) throw new Error('Informe os frascos'); const upd = { estoque: inc(fr * (m.volume || 1)) }; if (U.num(d.preco)) upd.precoFrasco = U.num(d.preco); await sub(FID, 'medicamentos').doc(m.id).update(upd); toast('Estoque atualizado'); abrir('medicamentos'); } }); });
   $('#novo').onclick = () => formMed(null);
+  $('#colar').onclick = colarMedicamentos;
 };
+// cola várias linhas copiadas do Excel: Nome | Tipo | Unidade | Volume do frasco | Preço do frasco | Dose | Carência (dias) | Estoque (frascos)
+function colarMedicamentos() {
+  const COLS = ['Nome', 'Tipo', 'Unidade (ml/dose)', 'Volume do frasco', 'Preço do frasco', 'Dose padrão', 'Carência (dias)', 'Estoque (frascos)'];
+  modal('Colar lista de medicamentos', `<p class="muted">No Excel, monte as colunas nesta ordem, selecione as linhas, copie (Ctrl+C) e cole aqui (Ctrl+V):<br><b>${COLS.join(' · ')}</b><br>Só o nome, o volume e o preço são obrigatórios.</p>
+    <textarea id="txtMed" rows="10" placeholder="Ivermectina 1%	Vermífugo	ml	500	180	10	35	4"></textarea><div id="prevMed"></div>`, {
+    larga: true, ok: 'Cadastrar todos',
+    aoAbrir: (f) => { $('#txtMed', f).oninput = () => { const l = lerLinhasMed($('#txtMed', f).value); $('#prevMed', f).innerHTML = l.length ? tabela([{ t: 'Nome', f: m => U.esc(m.nome) }, { t: 'Tipo', f: m => U.esc(m.tipo) }, { t: 'Frasco', f: m => `${m.volume} ${m.unidade} · ${U.brl2(m.precoFrasco)}` }, { t: 'Dose', f: m => m.dosePadrao || '' }, { t: 'Carência', f: m => m.carenciaDias || '' }, { t: 'Estoque', f: m => m.estoqueFr || '' }], l) : ''; }; },
+    aoSalvar: async (f) => {
+      const l = lerLinhasMed($('#txtMed', f).value); if (!l.length) throw new Error('Nenhuma linha válida (precisa de nome, volume e preço)');
+      const b = db.batch(); l.forEach(m => { const { estoqueFr, ...o } = m; b.set(sub(FID, 'medicamentos').doc(), { ...o, estoque: (estoqueFr || 0) * o.volume, estoqueMin: 0, inativo: false, criadoEm: ts() }); });
+      await b.commit(); toast(`${l.length} medicamentos cadastrados`); abrir('medicamentos');
+    }
+  });
+}
+function lerLinhasMed(txt) {
+  return String(txt || '').split(/\r?\n/).map(l => l.split(/\t|;/).map(c => c.trim())).filter(c => c[0] && !/^nome$/i.test(c[0])).map(c => {
+    const tipo = TIPOS_MED.find(t => U.sem(t).startsWith(U.sem(c[1] || '').slice(0, 5)) && c[1]) || (c[1] ? 'Outro' : 'Outro');
+    const un = U.sem(c[2]); const unidade = un.startsWith('dose') ? 'dose' : un.startsWith('g') ? 'g' : un.startsWith('comp') ? 'comprimido' : 'ml';
+    return { nome: c[0], tipo, unidade, volume: U.num(c[3]), precoFrasco: U.num(c[4]), dosePadrao: U.num(c[5]), carenciaDias: U.num(c[6]) || 0, estoqueFr: U.num(c[7]) || 0 };
+  }).filter(m => m.volume && m.precoFrasco !== null);
+}
 function formMed(m) {
   m = m || {};
   modal(m.id ? 'Editar medicamento' : 'Novo medicamento', `<div class="grid g2">
@@ -1029,3 +1051,125 @@ TELAS.cotacoes = async (el) => {
     toast('Valores atualizados'); abrir('cotacoes');
   });
 };
+
+/* ---------- Dados de demonstração (superadmin) ---------- */
+// Preenche a fazenda com cadastros e histórico de exemplo para apresentar o sistema.
+// Tudo fica marcado como demo e pode ser removido depois, voltando os animais como estavam.
+const DEMO_MEDS = [
+  ['Ivermectina 1%', 'Vermífugo', 'ml', 500, 180, 10, 35, 6],
+  ['Ivermectina 3,15% longa ação', 'Vermífugo', 'ml', 500, 420, 10, 122, 4],
+  ['Doramectina 1%', 'Vermífugo', 'ml', 500, 520, 10, 35, 3],
+  ['Vacina clostridiose polivalente', 'Vacina', 'dose', 50, 95, 1, 0, 20],
+  ['Vacina antirrábica', 'Vacina', 'dose', 50, 85, 1, 0, 10],
+  ['Vacina brucelose B19', 'Vacina', 'dose', 10, 38, 1, 0, 10],
+  ['Oxitetraciclina LA', 'Antibiótico', 'ml', 50, 62, 20, 28, 8],
+  ['Carrapaticida pour-on', 'Carrapaticida', 'ml', 1000, 210, 30, 30, 5],
+  ['Anti-inflamatório (flunixina)', 'Anti-inflamatório', 'ml', 50, 78, 10, 7, 4],
+  ['Vitamina ADE', 'Vitamina/Mineral', 'ml', 250, 70, 5, 0, 6],
+  ['Benzoato de estradiol', 'Hormônio (IATF)', 'ml', 100, 95, 2, 0, 5],
+  ['Cloprostenol (PGF)', 'Hormônio (IATF)', 'ml', 50, 120, 2, 0, 5],
+  ['eCG', 'Hormônio (IATF)', 'dose', 25, 260, 1, 0, 6],
+  ['Implante de progesterona', 'Hormônio (IATF)', 'dose', 10, 280, 1, 0, 30]
+];
+const DEMO_TOUROS = [['Sêmen Nelore PO – Linha A', 'semen', 'Nelore', 38], ['Sêmen Angus – Linha B', 'semen', 'Angus', 45], ['Touro Nelore 1520 (repasse)', 'touro', 'Nelore', 0]];
+
+TELAS.demo = async (el) => {
+  const log = (await sub(FID, 'resumo').doc('demo').get()).data();
+  el.innerHTML = `<h2>Dados de demonstração – ${U.esc(FAZ.nome)}</h2>
+  <div class="card"><p>Preenche a fazenda com dados de exemplo para apresentar o sistema, em cima dos animais que você já importou:</p>
+    <ul class="muted"><li>14 medicamentos com preço, dose e carência (valores aproximados de mercado)</li><li>Protocolo de IATF padrão e 3 touros/sêmen</li>
+    <li>Custos gerais dos últimos 6 meses (sal, mão de obra, combustível, manutenção)</li><li>Vacinação dos bezerros e vermifugação dos garrotes (5 dias atrás)</li>
+    <li>Pesagem anterior (90 dias atrás) para mostrar o ganho de peso diário</li><li>Histórico de 6 meses do valor do rebanho (gráfico de evolução do proprietário)</li></ul>
+    ${log && log.ativo ? `<div class="alerta lar">Os dados de demonstração já estão nesta fazenda (criados em ${new Date(log.criadoEm).toLocaleString('pt-BR')}).</div><button class="btn perigo" id="remover">Remover dados de demonstração</button>`
+      : '<button class="btn" id="criar">Criar dados de demonstração</button>'}
+    <p class="muted" style="margin-top:10px">Tudo fica marcado como demonstração. O botão de remover apaga esses lançamentos e volta os animais como estavam.</p><div id="prog"></div></div>`;
+  if ($('#criar')) $('#criar').onclick = async () => { if (!(await confirmar('Criar dados de demonstração nesta fazenda?'))) return; $('#criar').disabled = true; try { await criarDemo(); toast('Dados de demonstração criados'); } catch (e) { console.error(e); toast('Erro: ' + e.message, 'erro', 6000); } abrir('demo'); };
+  if ($('#remover')) $('#remover').onclick = async () => { if (!(await confirmar('Remover todos os dados de demonstração desta fazenda?'))) return; $('#remover').disabled = true; try { await removerDemo(); toast('Dados de demonstração removidos'); } catch (e) { console.error(e); toast('Erro: ' + e.message, 'erro', 6000); } abrir('demo'); };
+};
+const progDemo = (t) => { const e = $('#prog'); if (e) e.innerHTML = `<p class="muted">${t}</p>`; };
+function mesesAtras(k) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - k); return d.toISOString().slice(0, 7); }
+
+async function criarDemo() {
+  const hoje = U.hoje(); const fin = { sanitario: {}, gerais: {} }; const add = (o, m, r, v) => { o[m] = o[m] || {}; o[m][r || 'total'] = (o[m][r || 'total'] || 0) + v; };
+  const log = { ativo: true, criadoEm: Date.now(), meds: [], touros: [], protocolos: [], custos: [], hist: [], fin: null };
+  progDemo('Cadastrando medicamentos, protocolo e touros…');
+  let b = db.batch();
+  const medRef = {};
+  for (const [nome, tipo, unidade, volume, preco, dose, car, est] of DEMO_MEDS) { const r = sub(FID, 'medicamentos').doc(); medRef[nome] = { id: r.id, nome, unidade, volume, precoFrasco: preco, carenciaDias: car }; log.meds.push(r.id); b.set(r, { nome, tipo, unidade, volume, precoFrasco: preco, dosePadrao: dose, carenciaDias: car, estoque: est * volume, estoqueMin: 2, inativo: false, demo: true, criadoEm: ts() }); }
+  for (const [nome, tipo, raca, precoDose] of DEMO_TOUROS) { const r = sub(FID, 'touros').doc(); log.touros.push(r.id); b.set(r, { nome, tipo, raca, precoDose, demo: true }); }
+  if (!C.protocolos.length) { const r = sub(FID, 'protocolos').doc(); log.protocolos.push(r.id); b.set(r, { nome: 'IATF padrão (D0-D8-D10)', diasDG: 30, etapas: [{ nome: 'D0 – implante + BE', dia: 0, ia: false }, { nome: 'D8 – retirada + PGF + eCG', dia: 8, ia: false }, { nome: 'D10 – inseminação', dia: 10, ia: true }], demo: true, criadoEm: ts() }); }
+  await b.commit();
+
+  progDemo('Lendo o rebanho…');
+  const animais = docs(await sub(FID, 'animais').where('status', '==', 'ativo').get());
+  const cab = animais.length || 1;
+
+  progDemo('Lançando custos gerais dos últimos 6 meses…');
+  b = db.batch();
+  for (let k = 0; k < 6; k++) {
+    const mes = mesesAtras(k); const data = mes + '-05';
+    const itens = [['Sal mineral', 'Sal mineral – consumo do mês', Math.round(cab * 11.5 * (0.9 + Math.random() * 0.2))], ['Mão de obra', 'Folha dos funcionários', 18500], ['Combustível', 'Diesel trator e caminhonete', Math.round(3200 + Math.random() * 1600)], ['Manutenção', 'Cercas, bebedouros e curral', Math.round(1500 + Math.random() * 2500)]];
+    for (const [tipoCusto, descricao, valor] of itens) { const r = sub(FID, 'custos').doc(); log.custos.push(r.id); b.set(r, { data, mes, tipoCusto, descricao, valor, retiroId: null, demo: true, usuario: SESSAO.user.email, criadoEm: ts() }); add(fin.gerais, mes, 'total', valor); }
+  }
+  await b.commit();
+
+  progDemo('Aplicando vacinas e vermífugos de exemplo e pesagem anterior…');
+  const dataApl = U.addDias(hoje, -5); const mesPassado = U.mes(dataApl); const data90 = U.addDias(hoje, -90);
+  const vac = medRef['Vacina clostridiose polivalente']; const verm = medRef['Ivermectina 1%'];
+  const GMD = { bezerro: [0.55, 0.85], bezerra: [0.5, 0.75], garrote: [0.45, 0.8], novilha: [0.35, 0.6], boi: [0.4, 0.75], touro: [0.2, 0.4], vaca: [0.05, 0.3] };
+  const ops = [];
+  for (const a of animais) {
+    const upd = {}; const backup = {}; let custo = 0; const evs = [];
+    const guarda = (campo) => { if (!(campo in backup)) backup[campo] = a[campo] === undefined ? null : a[campo]; };
+    if ((a.categoria === 'bezerro' || a.categoria === 'bezerra') && vac) { const c = CALC.custoDose(vac, 1); custo += c; evs.push(['sanidade', dataApl, { medicamentoId: vac.id, medicamento: vac.nome, dose: 1, unidade: 'dose', custo: c, carenciaAte: null }]); }
+    if (a.categoria === 'garrote' && verm) { const dose = Math.max(3, Math.round((a.pesoAtual || 300) / 50)); const c = CALC.custoDose(verm, dose); custo += c; const car = U.addDias(dataApl, verm.carenciaDias); evs.push(['sanidade', dataApl, { medicamentoId: verm.id, medicamento: verm.nome, dose, unidade: 'ml', custo: c, carenciaAte: car }]); if (car >= hoje) { guarda('carenciaAte'); upd.carenciaAte = a.carenciaAte && a.carenciaAte > car ? a.carenciaAte : car; } }
+    if (U.num(a.pesoAtual) && !a.pesoAnterior && GMD[a.categoria]) {
+      const [lo, hi] = GMD[a.categoria]; const g = Math.round((lo + Math.random() * (hi - lo)) * 1000) / 1000; const ant = Math.round((a.pesoAtual - g * 90) * 10) / 10;
+      if (ant > 25) { ['pesoAnterior', 'dataPesoAnterior', 'gmd', 'dataPeso'].forEach(guarda); upd.pesoAnterior = ant; upd.dataPesoAnterior = data90; upd.gmd = g; if (!a.dataPeso || a.dataPeso <= data90) upd.dataPeso = hoje; evs.push(['pesagem', data90, { peso: ant, gmd: null }]); }
+    }
+    if (custo > 0) { guarda('custoSanitario'); upd.custoSanitario = Math.round(((a.custoSanitario || 0) + custo) * 100) / 100; add(fin.sanitario, mesPassado, 'total', custo); if (a.retiroId) add(fin.sanitario, mesPassado, 'r_' + a.retiroId, custo); }
+    if (Object.keys(upd).length) ops.push({ tipo: 'update', ref: sub(FID, 'animais').doc(a.id), dados: { ...upd, demo: true, demoBackup: backup } });
+    for (const [tipo, data, dados] of evs) { const ev = novoEvento(FID, a, tipo, data, dados, { demo: true }); ops.push({ tipo: 'set', ref: ev.ref, dados: ev.dados }); }
+  }
+  await gravarEmLotes(ops, (f, t) => progDemo(`Gravando ${U.n(f)} de ${U.n(t)}…`));
+
+  progDemo('Somando financeiro e recalculando…');
+  const fb = db.batch();
+  for (const campo of ['sanitario', 'gerais']) for (const [mes, vals] of Object.entries(fin[campo])) { const m = {}; for (const [k, v] of Object.entries(vals)) m[k] = inc(Math.round(v * 100) / 100); fb.set(sub(FID, 'resumo').doc('financeiro'), { tipo: 'financeiro', [campo]: { [mes]: m } }, { merge: true }); }
+  log.fin = fin; fb.set(sub(FID, 'resumo').doc('demo'), log);
+  await fb.commit();
+  const atual = await recalcularResumo(FID);
+
+  progDemo('Criando histórico de 6 meses do valor do rebanho…');
+  const hb = db.batch(); const g = atual.geral;
+  for (let k = 1; k <= 6; k++) {
+    const mes = mesesAtras(k); const ref = sub(FID, 'resumo').doc('h-' + mes);
+    if ((await ref.get()).exists) continue;
+    const f = 1 - k * (0.018 + Math.random() * 0.01); const fc = 1 - k * 0.006;
+    const enx = (b) => ({ cabecas: Math.round(b.cabecas * fc), valor: b.valor * f, arrobas: b.arrobas * (f + 0.01), pesoTotal: b.pesoTotal * (f + 0.01), pesoMedio: b.pesoMedio * (1 - k * 0.012), taxaPrenhez: b.repro.taxaPrenhez, gmdMedio: b.gmdMedio });
+    hb.set(ref, { tipo: 'hist', mes, demo: true, geral: enx(g), porRetiro: Object.fromEntries(Object.entries(atual.porRetiro).map(([id, b2]) => [id, enx(b2)])), atualizadoEm: ts() });
+    log.hist.push('h-' + mes);
+  }
+  hb.set(sub(FID, 'resumo').doc('demo'), { hist: log.hist }, { merge: true });
+  await hb.commit();
+  await carregarCadastros();
+}
+
+async function removerDemo() {
+  const log = (await sub(FID, 'resumo').doc('demo').get()).data() || {};
+  const ops = [];
+  progDemo('Voltando os animais como estavam…');
+  const animais = docs(await sub(FID, 'animais').where('demo', '==', true).get());
+  const del = firebase.firestore.FieldValue.delete();
+  for (const a of animais) { const bk = a.demoBackup || {}; const upd = { demo: del, demoBackup: del }; for (const [k, v] of Object.entries(bk)) upd[k] = v === null ? del : v; ops.push({ tipo: 'update', ref: sub(FID, 'animais').doc(a.id), dados: upd }); }
+  progDemo('Apagando lançamentos de demonstração…');
+  docs(await sub(FID, 'eventos').where('demo', '==', true).get()).forEach(e => ops.push({ tipo: 'delete', ref: sub(FID, 'eventos').doc(e.id) }));
+  for (const [col, ids] of [['medicamentos', log.meds], ['touros', log.touros], ['protocolos', log.protocolos], ['custos', log.custos]]) (ids || []).forEach(id => ops.push({ tipo: 'delete', ref: sub(FID, col).doc(id) }));
+  (log.hist || []).forEach(id => ops.push({ tipo: 'delete', ref: sub(FID, 'resumo').doc(id) }));
+  await gravarEmLotes(ops, (f, t) => progDemo(`Removendo ${U.n(f)} de ${U.n(t)}…`));
+  const fb = db.batch();
+  for (const campo of ['sanitario', 'gerais']) for (const [mes, vals] of Object.entries((log.fin || {})[campo] || {})) { const m = {}; for (const [k, v] of Object.entries(vals)) m[k] = inc(-Math.round(v * 100) / 100); fb.set(sub(FID, 'resumo').doc('financeiro'), { [campo]: { [mes]: m } }, { merge: true }); }
+  fb.set(sub(FID, 'resumo').doc('demo'), { ativo: false, removidoEm: Date.now() });
+  await fb.commit();
+  await recalcularResumo(FID); await carregarCadastros();
+}
