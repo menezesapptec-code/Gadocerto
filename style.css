@@ -8,7 +8,7 @@ html,body{margin:0;padding:0;background:var(--fundo);color:var(--texto);font-fam
 a{color:var(--verde)}
 h1,h2,h3{margin:0 0 .5em;line-height:1.2}
 h2{font-size:1.25rem} h3{font-size:1.05rem}
-.topo{background:var(--verde);color:#fff;display:flex;align-items:center;gap:12px;padding:10px 16px;position:sticky;top:0;z-index:20;flex-wrap:wrap}
+.topo{background:var(--verde);color:#fff;display:flex;align-items:center;gap:12px;padding:10px 16px;position:sticky;top:0;z-index:20;flex-wrap:wrap;min-height:58px}
 .topo .marca{font-weight:700;font-size:1.1rem;letter-spacing:.3px}
 .topo .esp{flex:1}
 .topo select{background:#fff1;color:#fff;border:1px solid #fff5;border-radius:8px;padding:6px 8px;max-width:220px}
@@ -16,12 +16,14 @@ h2{font-size:1.25rem} h3{font-size:1.05rem}
 .topo button{background:transparent;color:#fff;border:1px solid #fff6;border-radius:8px;padding:6px 10px;cursor:pointer}
 .conexao{font-size:.8rem;padding:3px 8px;border-radius:20px}
 .conexao.on{background:#ffffff22}.conexao.off{background:var(--alerta);color:#fff}
-.layout{display:flex;min-height:calc(100vh - 52px)}
-.menu{width:220px;background:#fff;border-right:1px solid var(--borda);padding:10px 0;flex-shrink:0}
-.menu button{display:block;width:100%;text-align:left;padding:10px 18px;border:0;background:none;font-size:.95rem;color:var(--texto);cursor:pointer}
-.menu button:hover{background:var(--verde-claro)}
-.menu button.ativo{background:var(--verde-claro);color:var(--verde);font-weight:600;border-left:3px solid var(--verde)}
-.menu .grupo{font-size:.72rem;text-transform:uppercase;color:var(--sub);padding:12px 18px 4px;letter-spacing:.5px}
+.layout{display:flex;align-items:flex-start;min-height:calc(100vh - 58px)}
+/* menu lateral verde escuro, com rolagem própria (independente da tela) */
+.menu{width:220px;background:#143d26;padding:10px 0 24px;flex-shrink:0;position:sticky;top:58px;height:calc(100vh - 58px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#3d7a52 #143d26}
+.menu::-webkit-scrollbar{width:8px}.menu::-webkit-scrollbar-track{background:#143d26}.menu::-webkit-scrollbar-thumb{background:#3d7a52;border-radius:8px}
+.menu button{display:block;width:100%;text-align:left;padding:10px 18px;border:0;border-left:3px solid transparent;background:none;font-size:.95rem;color:#e2efe6;cursor:pointer}
+.menu button:hover{background:#1d5233;color:#fff}
+.menu button.ativo{background:#22613c;color:#fff;font-weight:600;border-left-color:#8fd9a8}
+.menu .grupo{font-size:.72rem;text-transform:uppercase;color:#9cc7ab;padding:14px 18px 4px;letter-spacing:.5px}
 .conteudo{flex:1;padding:18px;max-width:1300px;min-width:0}
 .card{background:var(--card);border:1px solid var(--borda);border-radius:var(--raio);padding:16px;box-shadow:var(--sombra);margin-bottom:14px}
 .grid{display:grid;gap:12px}
@@ -79,7 +81,7 @@ tr.click{cursor:pointer} tr.click:hover{background:var(--verde-claro)}
 .grande-input{font-size:1.6rem;padding:14px;text-align:center;font-weight:700;letter-spacing:1px}
 canvas{max-width:100%}
 @media (max-width:860px){
-  .menu{position:fixed;left:-240px;top:52px;bottom:0;z-index:30;transition:left .2s;box-shadow:2px 0 10px #0002;overflow:auto}
+  .menu{position:fixed;left:-240px;top:58px;bottom:0;height:auto;z-index:30;transition:left .2s;box-shadow:2px 0 10px #0004}
   .menu.aberto{left:0}
   .mobile-menu{display:inline-block}
   .g3,.g4{grid-template-columns:repeat(2,minmax(0,1fr))}
